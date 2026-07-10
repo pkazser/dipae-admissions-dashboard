@@ -1,0 +1,8 @@
+streamlit
+pandas
+openpyxl
+xlrd
+plotly
+sqlalchemy
+python-docx
+fpdf2
