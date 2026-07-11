@@ -12,7 +12,7 @@ st.set_page_config(
     page_icon="🎓",
     layout="wide"
 )
-
+st.sidebar.success("TEST SIDEBAR ONLINE")
 show_sidebar_branding()
 # ---------------------------------------------------------
 # Αρχικοποίηση βάσης
