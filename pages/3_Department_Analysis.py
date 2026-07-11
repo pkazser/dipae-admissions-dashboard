@@ -22,7 +22,7 @@ st.markdown("""
 - Η **Συνολική Κάλυψη Τμήματος** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
 - Η **Βάση Τμήματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
 - Ο **Πρώτος Τμήματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
-- Στους βασικούς δείκτες, οι **ΓΕΛ Ημερήσιες Θέσεις** λαμβάνονται μετά τις τυχόν μεταφορές θέσεων προς τη ΓΕΛ Ημερήσια.
+- Στη ΓΕΛ Ημερήσια χρησιμοποιούνται οι θέσεις μετά τις τυχόν μεταφορές από άλλες κατηγορίες.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων ως ξεχωριστοί δείκτες.
 """)
 
@@ -72,11 +72,89 @@ def get_gel_day_row(df_department):
     return df_gel.iloc[0]
 
 
+def build_category_analysis_table(df_department):
+    """
+    Δημιουργεί πίνακα ανάλυσης ανά κατηγορία.
+
+    Κρίσιμη διόρθωση:
+    - Για τη ΓΕΛ Ημερήσια, οι θέσεις ανάλυσης λαμβάνονται από τις θέσεις μετά
+      τις τυχόν μεταφορές από άλλες κατηγορίες.
+    - Για τις υπόλοιπες κατηγορίες, χρησιμοποιούνται οι αρχικές θέσεις.
+
+    Έτσι τα γραφήματα κάλυψης και κενών θέσεων δεν εμφανίζουν τεχνητά
+    ποσοστά πάνω από 100% ή αρνητικές κενές θέσεις στη ΓΕΛ Ημερήσια.
+    """
+
+    df_display = df_department.copy()
+
+    df_display["analysis_positions"] = df_display["initial_positions"]
+
+    gel_mask = df_display["exam_category"] == "ΓΕΛ Ημερήσια"
+
+    df_display.loc[gel_mask, "analysis_positions"] = (
+        df_display.loc[gel_mask, "final_positions"]
+        .fillna(df_display.loc[gel_mask, "initial_positions"])
+    )
+
+    df_display["empty_positions"] = (
+        df_display["analysis_positions"]
+        - df_display["admitted"]
+    )
+
+    df_display["category_coverage"] = (
+        df_display["admitted"]
+        / df_display["analysis_positions"]
+        * 100
+    )
+
+    category_table = df_display[
+        [
+            "exam_category",
+            "admission_type",
+            "scientific_fields",
+            "analysis_positions",
+            "admitted",
+            "empty_positions",
+            "category_coverage",
+            "first_score",
+            "base_score",
+        ]
+    ].copy()
+
+    category_table = category_table.rename(
+        columns={
+            "exam_category": "Κατηγορία",
+            "admission_type": "Είδος Θέσης",
+            "scientific_fields": "Επιστημονικά Πεδία",
+            "analysis_positions": "Θέσεις",
+            "admitted": "Επιτυχόντες",
+            "empty_positions": "Κενές Θέσεις",
+            "category_coverage": "Κάλυψη Κατηγορίας %",
+            "first_score": "Βαθμός Πρώτου",
+            "base_score": "Βάση Τελευταίου",
+        }
+    )
+
+    for col in [
+        "Θέσεις",
+        "Επιτυχόντες",
+        "Κενές Θέσεις",
+    ]:
+        category_table[col] = category_table[col].fillna(0).astype(int)
+
+    for col in [
+        "Κάλυψη Κατηγορίας %",
+        "Βαθμός Πρώτου",
+        "Βάση Τελευταίου",
+    ]:
+        category_table[col] = category_table[col].round(2)
+
+    return category_table
+
+
 def highlight_empty_positions(val):
     """
     Χρωματισμός κενών θέσεων.
-    Κενές θέσεις > 0: κόκκινο
-    Κενές θέσεις = 0: πράσινο
     """
 
     try:
@@ -238,15 +316,9 @@ try:
     gel_day_row = get_gel_day_row(df_department)
 
     if gel_day_row is not None:
-        # Για τη ΓΕΛ Ημερήσια χρησιμοποιούμε τις θέσεις μετά τις μεταφορές.
-        # Δεν τις εμφανίζουμε ως "τελικές θέσεις", αλλά ως πραγματικές θέσεις ΓΕΛ Ημερήσιας.
         gel_day_positions = safe_int(
             gel_day_row.get("final_positions"),
             default=safe_int(gel_day_row.get("initial_positions"))
-        )
-
-        gel_day_initial_positions = safe_int(
-            gel_day_row.get("initial_positions")
         )
 
         gel_day_admitted = safe_int(
@@ -273,7 +345,6 @@ try:
         )
     else:
         gel_day_positions = 0
-        gel_day_initial_positions = 0
         gel_day_admitted = 0
         gel_day_empty_positions = 0
         gel_day_coverage = None
@@ -380,53 +451,7 @@ try:
 
     st.subheader("Αναλυτικός πίνακας ανά κατηγορία εισαγωγής")
 
-    df_department_display = df_department.copy()
-
-    df_department_display["empty_positions"] = (
-        df_department_display["initial_positions"]
-        - df_department_display["admitted"]
-    )
-
-    df_department_display["category_coverage"] = (
-        df_department_display["admitted"]
-        / df_department_display["initial_positions"]
-        * 100
-    )
-
-    category_table = df_department_display[
-        [
-            "exam_category",
-            "admission_type",
-            "scientific_fields",
-            "initial_positions",
-            "admitted",
-            "empty_positions",
-            "category_coverage",
-            "first_score",
-            "base_score",
-        ]
-    ].copy()
-
-    category_table = category_table.rename(
-        columns={
-            "exam_category": "Κατηγορία",
-            "admission_type": "Είδος Θέσης",
-            "scientific_fields": "Επιστημονικά Πεδία",
-            "initial_positions": "Αρχικές Θέσεις",
-            "admitted": "Επιτυχόντες",
-            "empty_positions": "Κενές Θέσεις",
-            "category_coverage": "Κάλυψη Κατηγορίας %",
-            "first_score": "Βαθμός Πρώτου",
-            "base_score": "Βάση Τελευταίου",
-        }
-    )
-
-    for col in [
-        "Κάλυψη Κατηγορίας %",
-        "Βαθμός Πρώτου",
-        "Βάση Τελευταίου",
-    ]:
-        category_table[col] = category_table[col].round(2)
+    category_table = build_category_analysis_table(df_department)
 
     st.dataframe(
         style_category_table(category_table),
@@ -435,9 +460,8 @@ try:
     )
 
     st.caption(
-        "Η ΓΕΛ Ημερήσια επισημαίνεται με κίτρινο, επειδή αποτελεί τη βασική κατηγορία "
-        "αναφοράς για τη βάση και τη ζήτηση του Τμήματος. "
-        "Στον πίνακα εμφανίζονται οι αρχικές θέσεις ανά κατηγορία."
+        "Η ΓΕΛ Ημερήσια επισημαίνεται με κίτρινο. "
+        "Στη στήλη Θέσεις, για τη ΓΕΛ Ημερήσια λαμβάνονται υπόψη οι θέσεις μετά τις τυχόν μεταφορές."
     )
 
     st.divider()
@@ -454,9 +478,9 @@ try:
         fig_positions = px.bar(
             category_table,
             x="Κατηγορία",
-            y=["Αρχικές Θέσεις", "Επιτυχόντες"],
+            y=["Θέσεις", "Επιτυχόντες"],
             barmode="group",
-            title="Αρχικές θέσεις και επιτυχόντες ανά κατηγορία"
+            title="Θέσεις και επιτυχόντες ανά κατηγορία"
         )
 
         fig_positions.update_layout(
@@ -486,7 +510,7 @@ try:
                 "ΓΕΛ Ημερήσια": "#f59f00",
                 "Λοιπές κατηγορίες": "#1f77b4",
             },
-            title="Κάλυψη ανά κατηγορία με βάση τις αρχικές θέσεις"
+            title="Κάλυψη ανά κατηγορία"
         )
 
         fig_coverage.update_traces(
@@ -524,7 +548,7 @@ try:
                 "ΓΕΛ Ημερήσια": "#f59f00",
                 "Λοιπές κατηγορίες": "#1f77b4",
             },
-            title="Κενές θέσεις ανά κατηγορία με βάση τις αρχικές θέσεις"
+            title="Κενές θέσεις ανά κατηγορία"
         )
 
         fig_empty.update_traces(
