@@ -5,19 +5,280 @@ from modules.database_manager import load_admissions_with_departments
 
 st.set_page_config(
     page_title="Dashboard Διοίκησης | ΔΙΠΑΕ",
-    page_icon="📈",
+    page_icon="📊",
     layout="wide"
 )
 
 
-st.title("📈 Dashboard Διοίκησης Εισακτέων ΔΙ.ΠΑ.Ε.")
+st.title("📊 Dashboard Διοίκησης Εισακτέων ΔΙ.ΠΑ.Ε.")
 
 st.markdown("""
-Κεντρική σελίδα συνοπτικής παρακολούθησης των αποτελεσμάτων εισαγωγής
-του ΔΙ.ΠΑ.Ε. ανά έτος, κατηγορία, σχολή και πόλη.
+Συνοπτική διοικητική εικόνα των εισακτέων του ΔΙ.ΠΑ.Ε. ανά έτος, Σχολή, Πόλη και Τμήμα.
+
+**Μεθοδολογικοί κανόνες της εφαρμογής:**
+
+- Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
+- Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
+- Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
+- Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
+- Δεν χρησιμοποιούνται μέσοι όροι βάσεων ή μέσοι όροι πρώτου υποψηφίου.
+- Η **Βάση ΓΕΛ Ημερήσια** εμφανίζεται μόνο σε επίπεδο Τμήματος.
 """)
 
 st.divider()
+
+
+def get_gel_day_scores(df_year):
+    """
+    Επιστρέφει βάση τελευταίου και βαθμό πρώτου από τη ΓΕΛ Ημερήσια ανά Τμήμα.
+    Χρησιμοποιείται μόνο σε πίνακες Τμημάτων και σε επισημάνσεις Τμημάτων.
+    """
+
+    df_gel = df_year[
+        df_year["exam_category"] == "ΓΕΛ Ημερήσια"
+    ].copy()
+
+    if df_gel.empty:
+        return None
+
+    scores = (
+        df_gel[
+            [
+                "department_code",
+                "first_score",
+                "base_score",
+            ]
+        ]
+        .drop_duplicates(subset=["department_code"])
+        .rename(
+            columns={
+                "first_score": "gel_day_first_score",
+                "base_score": "gel_day_base_score",
+            }
+        )
+    )
+
+    return scores
+
+
+def build_department_summary(df_year):
+    """
+    Δημιουργεί σύνοψη ανά Τμήμα για όλες τις κατηγορίες.
+
+    Οι συνολικές θέσεις είναι οι αρχικές θέσεις.
+    Οι βάσεις προέρχονται από τη ΓΕΛ Ημερήσια.
+    """
+
+    summary = (
+        df_year
+        .groupby(
+            [
+                "department_code",
+                "department_name_clean",
+                "school",
+                "city",
+            ],
+            as_index=False
+        )
+        .agg(
+            total_positions=("initial_positions", "sum"),
+            total_admitted=("admitted", "sum"),
+        )
+    )
+
+    summary["empty_positions"] = (
+        summary["total_positions"]
+        - summary["total_admitted"]
+    )
+
+    summary["coverage"] = (
+        summary["total_admitted"]
+        / summary["total_positions"]
+        * 100
+    )
+
+    gel_scores = get_gel_day_scores(df_year)
+
+    if gel_scores is not None:
+        summary = summary.merge(
+            gel_scores,
+            on="department_code",
+            how="left"
+        )
+    else:
+        summary["gel_day_first_score"] = None
+        summary["gel_day_base_score"] = None
+
+    return summary
+
+
+def build_group_summary(department_summary, group_field):
+    """
+    Δημιουργεί σύνοψη ανά Σχολή ή Πόλη.
+    Δεν υπολογίζει μέσους όρους βάσεων.
+    """
+
+    summary = (
+        department_summary
+        .groupby(group_field, as_index=False)
+        .agg(
+            departments=("department_code", "nunique"),
+            total_positions=("total_positions", "sum"),
+            total_admitted=("total_admitted", "sum"),
+            empty_positions=("empty_positions", "sum"),
+        )
+    )
+
+    summary["coverage"] = (
+        summary["total_admitted"]
+        / summary["total_positions"]
+        * 100
+    )
+
+    return summary
+
+
+def format_department_table(df):
+    """
+    Πίνακας Τμημάτων για εμφάνιση.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "total_positions",
+            "total_admitted",
+            "empty_positions",
+            "coverage",
+            "gel_day_first_score",
+            "gel_day_base_score",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Τμήμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "total_positions": "Συνολικές Θέσεις",
+            "total_admitted": "Επιτυχόντες",
+            "empty_positions": "Κενές Θέσεις",
+            "coverage": "Κάλυψη %",
+            "gel_day_first_score": "Πρώτος ΓΕΛ Ημ.",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
+        }
+    )
+
+    for col in [
+        "Κάλυψη %",
+        "Πρώτος ΓΕΛ Ημ.",
+        "Βάση ΓΕΛ Ημ.",
+    ]:
+        display[col] = display[col].round(2)
+
+    return display
+
+
+def format_group_table(df, group_field, group_label):
+    """
+    Πίνακας Σχολής ή Πόλης για εμφάνιση.
+    """
+
+    display = df[
+        [
+            group_field,
+            "departments",
+            "total_positions",
+            "total_admitted",
+            "empty_positions",
+            "coverage",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            group_field: group_label,
+            "departments": "Τμήματα",
+            "total_positions": "Συνολικές Θέσεις",
+            "total_admitted": "Επιτυχόντες",
+            "empty_positions": "Κενές Θέσεις",
+            "coverage": "Κάλυψη %",
+        }
+    )
+
+    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+
+    return display
+
+
+def highlight_empty_positions(val):
+    """
+    Χρωματισμός κενών θέσεων.
+    """
+
+    try:
+        value = float(val)
+    except Exception:
+        return ""
+
+    if value > 0:
+        return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
+    else:
+        return "background-color: #d4edda; color: #155724; font-weight: bold;"
+
+
+def highlight_coverage(val):
+    """
+    Χρωματισμός κάλυψης.
+    """
+
+    try:
+        value = float(val)
+    except Exception:
+        return ""
+
+    if value >= 100:
+        return "background-color: #d4edda; color: #155724; font-weight: bold;"
+    elif value >= 90:
+        return "background-color: #fff3cd; color: #664d03; font-weight: bold;"
+    else:
+        return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
+
+
+def style_table(df):
+    """
+    Styling πινάκων.
+    """
+
+    style_obj = df.style
+
+    if "Κενές Θέσεις" in df.columns:
+        try:
+            style_obj = style_obj.map(
+                highlight_empty_positions,
+                subset=["Κενές Θέσεις"]
+            )
+        except AttributeError:
+            style_obj = style_obj.applymap(
+                highlight_empty_positions,
+                subset=["Κενές Θέσεις"]
+            )
+
+    if "Κάλυψη %" in df.columns:
+        try:
+            style_obj = style_obj.map(
+                highlight_coverage,
+                subset=["Κάλυψη %"]
+            )
+        except AttributeError:
+            style_obj = style_obj.applymap(
+                highlight_coverage,
+                subset=["Κάλυψη %"]
+            )
+
+    return style_obj
 
 
 try:
@@ -27,433 +288,414 @@ try:
         st.warning("Δεν υπάρχουν ακόμη δεδομένα εισακτέων στη βάση.")
         st.stop()
 
+    # ---------------------------------------------------------
+    # Φίλτρο έτους
+    # ---------------------------------------------------------
+
     years = sorted(df["year"].dropna().unique().tolist())
 
     selected_year = st.selectbox(
-        "Επιλογή έτους",
+        "Έτος",
         years,
         index=len(years) - 1
     )
 
     df_year = df[df["year"] == selected_year].copy()
 
-    category_options = [
-        "Βασικές κατηγορίες χωρίς 10%",
-        "Όλες οι κατηγορίες",
-        "Μόνο 10%",
-    ] + sorted(df_year["exam_category"].dropna().unique().tolist())
-
-    selected_category = st.selectbox(
-        "Επιλογή κατηγορίας",
-        category_options
-    )
-
-    if selected_category == "Όλες οι κατηγορίες":
-        filtered_df = df_year.copy()
-
-    elif selected_category == "Βασικές κατηγορίες χωρίς 10%":
-        filtered_df = df_year[
-            ~df_year["exam_category"].astype(str).str.contains("10%", na=False)
-        ].copy()
-
-    elif selected_category == "Μόνο 10%":
-        filtered_df = df_year[
-            df_year["exam_category"].astype(str).str.contains("10%", na=False)
-        ].copy()
-
-    else:
-        filtered_df = df_year[
-            df_year["exam_category"] == selected_category
-        ].copy()
-
-    if filtered_df.empty:
-        st.warning("Δεν υπάρχουν δεδομένα για τα επιλεγμένα φίλτρα.")
+    if df_year.empty:
+        st.warning("Δεν υπάρχουν δεδομένα για το επιλεγμένο έτος.")
         st.stop()
 
     # ---------------------------------------------------------
-    # KPIs
+    # Σύνοψη Τμημάτων / Σχολών / Πόλεων
     # ---------------------------------------------------------
 
-    total_initial_positions = int(filtered_df["initial_positions"].sum())
-    total_final_positions = int(filtered_df["final_positions"].sum())
-    total_admitted = int(filtered_df["admitted"].sum())
+    department_summary = build_department_summary(df_year)
 
-    if total_final_positions > 0:
-        total_coverage = total_admitted / total_final_positions * 100
-    else:
-        total_coverage = 0
+    school_summary = build_group_summary(
+        department_summary,
+        "school"
+    )
 
-    average_base = filtered_df["base_score"].mean()
+    city_summary = build_group_summary(
+        department_summary,
+        "city"
+    )
 
-    st.subheader(f"Κεντρική σύνοψη {selected_year} — {selected_category}")
+    # ---------------------------------------------------------
+    # Κεντρικά KPIs
+    # ---------------------------------------------------------
 
-    col1, col2, col3, col4 = st.columns(4)
+    total_departments = department_summary["department_code"].nunique()
+    total_schools = department_summary["school"].nunique()
+    total_cities = department_summary["city"].nunique()
 
-    with col1:
-        st.metric("Αρχικές θέσεις", total_initial_positions)
+    total_positions = int(department_summary["total_positions"].sum())
+    total_admitted = int(department_summary["total_admitted"].sum())
+    total_empty_positions = int(department_summary["empty_positions"].sum())
 
-    with col2:
-        st.metric("Τελικές θέσεις", total_final_positions)
+    total_coverage = (
+        total_admitted / total_positions * 100
+        if total_positions > 0
+        else 0
+    )
 
-    with col3:
-        st.metric("Επιτυχόντες", total_admitted)
+    gel_day_available = department_summary["gel_day_base_score"].notna().sum()
 
-    with col4:
-        st.metric("Συνολική κάλυψη", f"{total_coverage:.1f}%")
+    st.subheader(f"Συνολική διοικητική εικόνα {selected_year}")
 
-    col5, col6, col7, col8 = st.columns(4)
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-    with col5:
-        st.metric("Σχολές", filtered_df["school"].nunique())
+    with kpi1:
+        st.metric(
+            "Τμήματα",
+            total_departments
+        )
 
-    with col6:
-        st.metric("Πόλεις", filtered_df["city"].nunique())
+    with kpi2:
+        st.metric(
+            "Σχολές",
+            total_schools
+        )
 
-    with col7:
-        st.metric("Τμήματα", filtered_df["department_name_clean"].nunique())
+    with kpi3:
+        st.metric(
+            "Πόλεις",
+            total_cities
+        )
 
-    with col8:
-        st.metric("Μέση βάση", f"{average_base:.0f}")
+    with kpi4:
+        st.metric(
+            "Συνολικές Θέσεις",
+            total_positions
+        )
+
+    kpi5, kpi6, kpi7, kpi8 = st.columns(4)
+
+    with kpi5:
+        st.metric(
+            "Επιτυχόντες",
+            total_admitted
+        )
+
+    with kpi6:
+        st.metric(
+            "Κενές Θέσεις",
+            total_empty_positions
+        )
+
+    with kpi7:
+        st.metric(
+            "Συνολική Κάλυψη",
+            f"{total_coverage:.1f}%"
+        )
+
+    with kpi8:
+        st.metric(
+            "Τμήματα με Βάση ΓΕΛ Ημ.",
+            gel_day_available
+        )
 
     st.caption(
-        "Η συνολική κάλυψη υπολογίζεται ως σύνολο επιτυχόντων / σύνολο τελικών θέσεων. "
-        "Η μέση βάση είναι ενδεικτικός μέσος όρος εγγραφών και δεν αποτελεί επίσημη ενιαία βάση Ιδρύματος."
+        "Η ανάλυση περιλαμβάνει όλες τις κατηγορίες εισαγωγής. "
+        "Οι Συνολικές Θέσεις είναι οι αρχικές θέσεις. "
+        "Η Βάση ΓΕΛ Ημερήσια εμφανίζεται μόνο σε επίπεδο Τμήματος."
     )
 
     st.divider()
 
     # ---------------------------------------------------------
-    # Summary by category
+    # Συνοπτικά γραφήματα διοίκησης
     # ---------------------------------------------------------
 
-    st.subheader("Σύνοψη ανά κατηγορία εισαγωγής")
+    st.subheader("Συνοπτικά γραφήματα")
 
-    category_summary = (
-        filtered_df
-        .groupby("exam_category", as_index=False)
-        .agg(
-            departments=("department_name_clean", "nunique"),
-            final_positions=("final_positions", "sum"),
-            admitted=("admitted", "sum"),
-            average_base=("base_score", "mean"),
-        )
+    school_display = format_group_table(
+        school_summary.sort_values("total_admitted", ascending=False),
+        "school",
+        "Σχολή"
     )
 
-    category_summary["coverage"] = (
-        category_summary["admitted"]
-        / category_summary["final_positions"]
-        * 100
+    city_display = format_group_table(
+        city_summary.sort_values("total_admitted", ascending=False),
+        "city",
+        "Πόλη"
     )
 
-    category_display = category_summary.rename(
-        columns={
-            "exam_category": "Κατηγορία",
-            "departments": "Τμήματα",
-            "final_positions": "Τελικές Θέσεις",
-            "admitted": "Επιτυχόντες",
-            "coverage": "Κάλυψη %",
-            "average_base": "Μέση Βάση",
-        }
-    )
+    chart_col1, chart_col2 = st.columns(2)
 
-    category_display["Κάλυψη %"] = category_display["Κάλυψη %"].round(2)
-    category_display["Μέση Βάση"] = category_display["Μέση Βάση"].round(0)
-
-    st.dataframe(
-        category_display,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    fig_category = px.bar(
-        category_display,
-        x="Κατηγορία",
-        y="Επιτυχόντες",
-        text="Επιτυχόντες",
-        title="Επιτυχόντες ανά κατηγορία"
-    )
-
-    fig_category.update_traces(textposition="outside")
-
-    fig_category.update_layout(
-        xaxis_title="Κατηγορία",
-        yaxis_title="Επιτυχόντες",
-        uniformtext_minsize=8,
-        uniformtext_mode="hide"
-    )
-
-    st.plotly_chart(
-        fig_category,
-        use_container_width=True
-    )
-
-    st.divider()
-
-    # ---------------------------------------------------------
-    # School and city summaries
-    # ---------------------------------------------------------
-
-    col_school, col_city = st.columns(2)
-
-    with col_school:
-        st.subheader("Σύνοψη ανά Σχολή")
-
-        school_summary = (
-            filtered_df
-            .groupby("school", as_index=False)
-            .agg(
-                departments=("department_name_clean", "nunique"),
-                final_positions=("final_positions", "sum"),
-                admitted=("admitted", "sum"),
-                average_base=("base_score", "mean"),
-            )
-        )
-
-        school_summary["coverage"] = (
-            school_summary["admitted"]
-            / school_summary["final_positions"]
-            * 100
-        )
-
-        school_display = school_summary.rename(
-            columns={
-                "school": "Σχολή",
-                "departments": "Τμήματα",
-                "final_positions": "Θέσεις",
-                "admitted": "Επιτυχόντες",
-                "coverage": "Κάλυψη %",
-                "average_base": "Μέση Βάση",
-            }
-        )
-
-        school_display["Κάλυψη %"] = school_display["Κάλυψη %"].round(2)
-        school_display["Μέση Βάση"] = school_display["Μέση Βάση"].round(0)
-
-        st.dataframe(
-            school_display,
-            use_container_width=True,
-            hide_index=True
-        )
-
-    with col_city:
-        st.subheader("Σύνοψη ανά Πόλη")
-
-        city_summary = (
-            filtered_df
-            .groupby("city", as_index=False)
-            .agg(
-                departments=("department_name_clean", "nunique"),
-                final_positions=("final_positions", "sum"),
-                admitted=("admitted", "sum"),
-                average_base=("base_score", "mean"),
-            )
-        )
-
-        city_summary["coverage"] = (
-            city_summary["admitted"]
-            / city_summary["final_positions"]
-            * 100
-        )
-
-        city_display = city_summary.rename(
-            columns={
-                "city": "Πόλη",
-                "departments": "Τμήματα",
-                "final_positions": "Θέσεις",
-                "admitted": "Επιτυχόντες",
-                "coverage": "Κάλυψη %",
-                "average_base": "Μέση Βάση",
-            }
-        )
-
-        city_display["Κάλυψη %"] = city_display["Κάλυψη %"].round(2)
-        city_display["Μέση Βάση"] = city_display["Μέση Βάση"].round(0)
-
-        st.dataframe(
-            city_display,
-            use_container_width=True,
-            hide_index=True
-        )
-
-    col_chart1, col_chart2 = st.columns(2)
-
-    with col_chart1:
-        fig_school = px.bar(
-            school_display,
+    with chart_col1:
+        fig_school_positions = px.bar(
+            school_display.sort_values("Συνολικές Θέσεις", ascending=False),
             x="Σχολή",
-            y="Επιτυχόντες",
-            text="Επιτυχόντες",
-            title="Επιτυχόντες ανά Σχολή"
+            y=["Συνολικές Θέσεις", "Επιτυχόντες"],
+            barmode="group",
+            title="Συνολικές θέσεις και επιτυχόντες ανά Σχολή"
         )
 
-        fig_school.update_traces(textposition="outside")
-
-        fig_school.update_layout(
+        fig_school_positions.update_layout(
             xaxis_title="Σχολή",
-            yaxis_title="Επιτυχόντες",
-            uniformtext_minsize=8,
-            uniformtext_mode="hide"
+            yaxis_title="Πλήθος",
+            legend_title=""
         )
 
         st.plotly_chart(
-            fig_school,
+            fig_school_positions,
             use_container_width=True
         )
 
-    with col_chart2:
-        fig_city = px.bar(
-            city_display,
-            x="Πόλη",
-            y="Επιτυχόντες",
-            text="Επιτυχόντες",
-            title="Επιτυχόντες ανά Πόλη"
-        )
-
-        fig_city.update_traces(textposition="outside")
-
-        fig_city.update_layout(
-            xaxis_title="Πόλη",
-            yaxis_title="Επιτυχόντες",
-            uniformtext_minsize=8,
-            uniformtext_mode="hide"
-        )
-
-        st.plotly_chart(
-            fig_city,
-            use_container_width=True
-        )
-
-    st.divider()
-
-    # ---------------------------------------------------------
-    # Top / risk sections
-    # ---------------------------------------------------------
-
-    st.subheader("Γρήγορες επισημάνσεις")
-
-    department_summary = (
-        filtered_df
-        .groupby(
-            [
-                "department_name_clean",
-                "school",
-                "city",
-            ],
-            as_index=False
-        )
-        .agg(
-            final_positions=("final_positions", "sum"),
-            admitted=("admitted", "sum"),
-            average_base=("base_score", "mean"),
-        )
-    )
-
-    department_summary["coverage"] = (
-        department_summary["admitted"]
-        / department_summary["final_positions"]
-        * 100
-    )
-
-    department_display = department_summary.rename(
-        columns={
-            "department_name_clean": "Τμήμα",
-            "school": "Σχολή",
-            "city": "Πόλη",
-            "final_positions": "Θέσεις",
-            "admitted": "Επιτυχόντες",
-            "coverage": "Κάλυψη %",
-            "average_base": "Μέση Βάση",
-        }
-    )
-
-    department_display["Κάλυψη %"] = department_display["Κάλυψη %"].round(2)
-    department_display["Μέση Βάση"] = department_display["Μέση Βάση"].round(0)
-
-    col_top, col_low = st.columns(2)
-
-    with col_top:
-        st.markdown("### Τμήματα με περισσότερους επιτυχόντες")
-
-        top_departments = department_display.sort_values(
-            "Επιτυχόντες",
-            ascending=False
-        ).head(5)
-
-        st.dataframe(
-            top_departments,
-            use_container_width=True,
-            hide_index=True
-        )
-
-    with col_low:
-        st.markdown("### Τμήματα με χαμηλότερη κάλυψη")
-
-        low_coverage_departments = department_display.sort_values(
-            "Κάλυψη %",
-            ascending=True
-        ).head(5)
-
-        st.dataframe(
-            low_coverage_departments,
-            use_container_width=True,
-            hide_index=True
-        )
-
-    col_fig_top, col_fig_low = st.columns(2)
-
-    with col_fig_top:
-        fig_top = px.bar(
-            top_departments,
-            x="Τμήμα",
-            y="Επιτυχόντες",
-            text="Επιτυχόντες",
-            title="Top-5 τμήματα σε επιτυχόντες"
-        )
-
-        fig_top.update_traces(textposition="outside")
-
-        fig_top.update_layout(
-            xaxis_title="Τμήμα",
-            yaxis_title="Επιτυχόντες",
-            uniformtext_minsize=8,
-            uniformtext_mode="hide"
-        )
-
-        st.plotly_chart(
-            fig_top,
-            use_container_width=True
-        )
-
-    with col_fig_low:
-        fig_low = px.bar(
-            low_coverage_departments,
-            x="Τμήμα",
+    with chart_col2:
+        fig_school_coverage = px.bar(
+            school_display.sort_values("Κάλυψη %", ascending=False),
+            x="Σχολή",
             y="Κάλυψη %",
             text="Κάλυψη %",
-            title="Top-5 χαμηλότερης κάλυψης"
+            title="Κάλυψη ανά Σχολή"
         )
 
-        fig_low.update_traces(
+        fig_school_coverage.update_traces(
             texttemplate="%{text:.1f}%",
             textposition="outside"
         )
 
-        fig_low.update_layout(
-            xaxis_title="Τμήμα",
+        fig_school_coverage.update_layout(
+            xaxis_title="Σχολή",
             yaxis_title="Κάλυψη %",
-            yaxis_range=[
-                0,
-                max(low_coverage_departments["Κάλυψη %"].max() * 1.25, 10)
-            ],
-            uniformtext_minsize=8,
-            uniformtext_mode="hide"
+            yaxis_range=[0, 110]
         )
 
         st.plotly_chart(
-            fig_low,
+            fig_school_coverage,
             use_container_width=True
         )
 
+    chart_col3, chart_col4 = st.columns(2)
+
+    with chart_col3:
+        fig_city_positions = px.bar(
+            city_display.sort_values("Συνολικές Θέσεις", ascending=False),
+            x="Πόλη",
+            y=["Συνολικές Θέσεις", "Επιτυχόντες"],
+            barmode="group",
+            title="Συνολικές θέσεις και επιτυχόντες ανά Πόλη"
+        )
+
+        fig_city_positions.update_layout(
+            xaxis_title="Πόλη",
+            yaxis_title="Πλήθος",
+            legend_title=""
+        )
+
+        st.plotly_chart(
+            fig_city_positions,
+            use_container_width=True
+        )
+
+    with chart_col4:
+        fig_city_coverage = px.bar(
+            city_display.sort_values("Κάλυψη %", ascending=False),
+            x="Πόλη",
+            y="Κάλυψη %",
+            text="Κάλυψη %",
+            title="Κάλυψη ανά Πόλη"
+        )
+
+        fig_city_coverage.update_traces(
+            texttemplate="%{text:.1f}%",
+            textposition="outside"
+        )
+
+        fig_city_coverage.update_layout(
+            xaxis_title="Πόλη",
+            yaxis_title="Κάλυψη %",
+            yaxis_range=[0, 110]
+        )
+
+        st.plotly_chart(
+            fig_city_coverage,
+            use_container_width=True
+        )
+
+    st.divider()
+
+    # ---------------------------------------------------------
+    # Γρήγορες επισημάνσεις
+    # ---------------------------------------------------------
+
+    st.subheader("Γρήγορες επισημάνσεις Τμημάτων")
+
+    alert_col1, alert_col2 = st.columns(2)
+
+    with alert_col1:
+        st.markdown("### Υψηλότερες βάσεις ΓΕΛ Ημερήσια")
+
+        top_base = (
+            department_summary
+            .dropna(subset=["gel_day_base_score"])
+            .sort_values("gel_day_base_score", ascending=False)
+            .head(5)
+        )
+
+        top_base_display = format_department_table(top_base)[
+            [
+                "Τμήμα",
+                "Σχολή",
+                "Πόλη",
+                "Βάση ΓΕΛ Ημ.",
+                "Πρώτος ΓΕΛ Ημ.",
+            ]
+        ]
+
+        st.dataframe(
+            top_base_display,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with alert_col2:
+        st.markdown("### Περισσότερες κενές θέσεις")
+
+        top_empty = (
+            department_summary
+            .sort_values("empty_positions", ascending=False)
+            .head(5)
+        )
+
+        top_empty_display = format_department_table(top_empty)[
+            [
+                "Τμήμα",
+                "Σχολή",
+                "Πόλη",
+                "Συνολικές Θέσεις",
+                "Επιτυχόντες",
+                "Κενές Θέσεις",
+                "Κάλυψη %",
+            ]
+        ]
+
+        st.dataframe(
+            style_table(top_empty_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    alert_col3, alert_col4 = st.columns(2)
+
+    with alert_col3:
+        st.markdown("### Χαμηλότερη κάλυψη")
+
+        low_coverage = (
+            department_summary
+            .sort_values("coverage", ascending=True)
+            .head(5)
+        )
+
+        low_coverage_display = format_department_table(low_coverage)[
+            [
+                "Τμήμα",
+                "Σχολή",
+                "Πόλη",
+                "Συνολικές Θέσεις",
+                "Επιτυχόντες",
+                "Κενές Θέσεις",
+                "Κάλυψη %",
+            ]
+        ]
+
+        st.dataframe(
+            style_table(low_coverage_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with alert_col4:
+        st.markdown("### Περισσότεροι επιτυχόντες")
+
+        top_admitted = (
+            department_summary
+            .sort_values("total_admitted", ascending=False)
+            .head(5)
+        )
+
+        top_admitted_display = format_department_table(top_admitted)[
+            [
+                "Τμήμα",
+                "Σχολή",
+                "Πόλη",
+                "Συνολικές Θέσεις",
+                "Επιτυχόντες",
+                "Κάλυψη %",
+            ]
+        ]
+
+        st.dataframe(
+            style_table(top_admitted_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    st.divider()
+
+    # ---------------------------------------------------------
+    # Αναλυτικοί πίνακες
+    # ---------------------------------------------------------
+
+    st.subheader("Αναλυτικοί πίνακες")
+
+    tab_dept, tab_school, tab_city = st.tabs(
+        [
+            "Ανά Τμήμα",
+            "Ανά Σχολή",
+            "Ανά Πόλη",
+        ]
+    )
+
+    with tab_dept:
+        department_display = format_department_table(
+            department_summary.sort_values(
+                "coverage",
+                ascending=False
+            )
+        )
+
+        st.dataframe(
+            style_table(department_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with tab_school:
+        school_display = format_group_table(
+            school_summary.sort_values(
+                "coverage",
+                ascending=False
+            ),
+            "school",
+            "Σχολή"
+        )
+
+        st.dataframe(
+            style_table(school_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with tab_city:
+        city_display = format_group_table(
+            city_summary.sort_values(
+                "coverage",
+                ascending=False
+            ),
+            "city",
+            "Πόλη"
+        )
+
+        st.dataframe(
+            style_table(city_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
 except Exception as e:
-    st.error("Υπήρξε πρόβλημα κατά τη δημιουργία του Dashboard Διοίκησης.")
+    st.error("Υπήρξε πρόβλημα κατά την παραγωγή του Dashboard Διοίκησης.")
     st.exception(e)
