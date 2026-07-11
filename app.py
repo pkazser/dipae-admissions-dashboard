@@ -1,3 +1,4 @@
+from components.sidebar_branding import show_sidebar_branding
 import streamlit as st
 from modules.database_manager import (
     initialize_database,
@@ -12,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-
+show_sidebar_branding()
 # ---------------------------------------------------------
 # Αρχικοποίηση βάσης
 # ---------------------------------------------------------
