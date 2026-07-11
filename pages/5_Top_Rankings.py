@@ -10,19 +10,19 @@ st.set_page_config(
 )
 
 
-st.title("🏆 Top Rankings Τμημάτων ΔΙ.ΠΑ.Ε.")
+st.title("🏆 Top Rankings Προπτυχιακών Προγραμμάτων ΔΙ.ΠΑ.Ε.")
 
 st.markdown("""
-Σε αυτή τη σελίδα εμφανίζονται κατατάξεις Τμημάτων του ΔΙ.ΠΑ.Ε. με βάση θέσεις,
-επιτυχόντες, κάλυψη, κενές θέσεις και βάση εισαγωγής.
+Σε αυτή τη σελίδα εμφανίζονται κατατάξεις των ενεργών προπτυχιακών προγραμμάτων
+του ΔΙ.ΠΑ.Ε. με βάση θέσεις, επιτυχόντες, κάλυψη, κενές θέσεις και βάση εισαγωγής.
 
 **Μεθοδολογικοί κανόνες της εφαρμογής:**
 
 - Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
 - Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
 - Η **Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
-- Η **Βάση Τμήματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
-- Ο **Πρώτος Τμήματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
+- Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
+- Ο **Πρώτος Προγράμματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
 """)
 
@@ -31,7 +31,7 @@ st.divider()
 
 def get_gel_day_scores(df_year):
     """
-    Επιστρέφει Βάση Τελευταίου και Βαθμό Πρώτου από τη ΓΕΛ Ημερήσια ανά Τμήμα.
+    Επιστρέφει Βάση Τελευταίου και Βαθμό Πρώτου από τη ΓΕΛ Ημερήσια ανά πρόγραμμα.
     Αυτές οι τιμές χρησιμοποιούνται στα rankings βάσεων.
     """
 
@@ -64,7 +64,7 @@ def get_gel_day_scores(df_year):
 
 def build_department_summary(df_year):
     """
-    Δημιουργεί σύνοψη ανά Τμήμα για όλες τις κατηγορίες.
+    Δημιουργεί σύνοψη ανά ενεργό προπτυχιακό πρόγραμμα για όλες τις κατηγορίες.
 
     Οι συνολικές θέσεις είναι οι αρχικές θέσεις.
     Οι βάσεις προέρχονται από τη ΓΕΛ Ημερήσια.
@@ -113,9 +113,204 @@ def build_department_summary(df_year):
     return summary
 
 
-def format_display_table(df):
+def format_base_ranking_table(df):
     """
-    Ετοιμάζει πίνακα για εμφάνιση.
+    Πίνακας ranking βάσεων.
+    Κρατάμε μόνο τις στήλες που χρειάζονται για να βρει ο χρήστης γρήγορα τις βάσεις.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "gel_day_base_score",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
+        }
+    )
+
+    display["Βάση ΓΕΛ Ημ."] = (
+        display["Βάση ΓΕΛ Ημ."]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    return display
+
+
+def format_first_score_ranking_table(df):
+    """
+    Πίνακας ranking πρώτου ΓΕΛ Ημερήσια.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "gel_day_first_score",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_first_score": "Πρώτος ΓΕΛ Ημ.",
+        }
+    )
+
+    display["Πρώτος ΓΕΛ Ημ."] = (
+        display["Πρώτος ΓΕΛ Ημ."]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    return display
+
+
+def format_admitted_ranking_table(df):
+    """
+    Πίνακας ranking επιτυχόντων.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "total_admitted",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "total_admitted": "Επιτυχόντες",
+        }
+    )
+
+    display["Επιτυχόντες"] = (
+        display["Επιτυχόντες"]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    return display
+
+
+def format_coverage_ranking_table(df):
+    """
+    Πίνακας ranking κάλυψης.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "coverage",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "coverage": "Κάλυψη %",
+        }
+    )
+
+    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+
+    return display
+
+
+def format_empty_ranking_table(df):
+    """
+    Πίνακας ranking κενών θέσεων.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "empty_positions",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "empty_positions": "Κενές Θέσεις",
+        }
+    )
+
+    display["Κενές Θέσεις"] = (
+        display["Κενές Θέσεις"]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    return display
+
+
+def format_positions_ranking_table(df):
+    """
+    Πίνακας ranking συνολικών θέσεων.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "total_positions",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "total_positions": "Συνολικές Θέσεις",
+        }
+    )
+
+    display["Συνολικές Θέσεις"] = (
+        display["Συνολικές Θέσεις"]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    return display
+
+
+def format_full_table(df):
+    """
+    Πλήρης, αλλά όχι υπερφορτωμένος, πίνακας όλων των προγραμμάτων.
+    Δεν περιλαμβάνει Πρώτο ΓΕΛ Ημ. και Κενές Θέσεις, ώστε ο χρήστης να βρίσκει εύκολα τις βάσεις.
     """
 
     display = df[
@@ -125,33 +320,45 @@ def format_display_table(df):
             "city",
             "total_positions",
             "total_admitted",
-            "empty_positions",
             "coverage",
-            "gel_day_first_score",
             "gel_day_base_score",
         ]
     ].copy()
 
     display = display.rename(
         columns={
-            "department_name_clean": "Τμήμα",
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
             "school": "Σχολή",
             "city": "Πόλη",
             "total_positions": "Συνολικές Θέσεις",
             "total_admitted": "Επιτυχόντες",
-            "empty_positions": "Κενές Θέσεις",
             "coverage": "Κάλυψη %",
-            "gel_day_first_score": "Πρώτος ΓΕΛ Ημ.",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    for col in [
-        "Κάλυψη %",
-        "Πρώτος ΓΕΛ Ημ.",
-        "Βάση ΓΕΛ Ημ.",
-    ]:
-        display[col] = display[col].round(2)
+    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+
+    display["Συνολικές Θέσεις"] = (
+        display["Συνολικές Θέσεις"]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    display["Επιτυχόντες"] = (
+        display["Επιτυχόντες"]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    display["Βάση ΓΕΛ Ημ."] = (
+        display["Βάση ΓΕΛ Ημ."]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
 
     return display
 
@@ -190,12 +397,22 @@ def highlight_coverage(val):
         return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
 
 
-def style_rank_table(df):
+def style_table(df):
     """
-    Styling πίνακα rankings.
+    Styling πίνακα.
+
+    Τα ποσοστά κάλυψης εμφανίζονται πάντα με 2 δεκαδικά και σύμβολο %.
     """
 
     style_obj = df.style
+
+    format_dict = {}
+
+    if "Κάλυψη %" in df.columns:
+        format_dict["Κάλυψη %"] = "{:.2f}%"
+
+    if format_dict:
+        style_obj = style_obj.format(format_dict)
 
     if "Κενές Θέσεις" in df.columns:
         try:
@@ -224,53 +441,38 @@ def style_rank_table(df):
     return style_obj
 
 
-def show_ranking_table_and_chart(
-    df,
-    sort_column,
-    ascending,
-    top_n,
+def build_chart(
+    display_df,
+    x_col,
+    y_col,
     title,
-    chart_y_title
+    yaxis_title,
+    is_percent=False,
+    is_score=False,
+    integer_axis=False
 ):
     """
-    Εμφανίζει πίνακα και γράφημα ranking.
+    Δημιουργεί κοινό γράφημα ranking.
     """
-
-    ranking_df = (
-        df
-        .dropna(subset=[sort_column])
-        .sort_values(sort_column, ascending=ascending)
-        .head(top_n)
-        .copy()
-    )
-
-    if ranking_df.empty:
-        st.warning("Δεν υπάρχουν διαθέσιμα δεδομένα για αυτό το ranking.")
-        return
-
-    display_df = format_display_table(ranking_df)
-
-    st.dataframe(
-        style_rank_table(display_df),
-        use_container_width=True,
-        hide_index=True
-    )
 
     fig = px.bar(
         display_df,
-        x="Τμήμα",
-        y=chart_y_title,
-        text=chart_y_title,
-        hover_data=["Σχολή", "Πόλη"],
+        x=x_col,
+        y=y_col,
+        text=y_col,
+        hover_data=[
+            col for col in ["Σχολή", "Πόλη"]
+            if col in display_df.columns
+        ],
         title=title
     )
 
-    if chart_y_title == "Κάλυψη %":
+    if is_percent:
         fig.update_traces(
-            texttemplate="%{text:.1f}%",
+            texttemplate="%{text:.2f}%",
             textposition="outside"
         )
-    elif chart_y_title in ["Βάση ΓΕΛ Ημ.", "Πρώτος ΓΕΛ Ημ."]:
+    elif is_score:
         fig.update_traces(
             texttemplate="%{text:.0f}",
             textposition="outside"
@@ -281,21 +483,85 @@ def show_ranking_table_and_chart(
         )
 
     fig.update_layout(
-        xaxis_title="Τμήμα",
-        yaxis_title=chart_y_title,
+        xaxis_title="Προπτυχιακό Πρόγραμμα",
+        yaxis_title=yaxis_title,
         uniformtext_minsize=8,
         uniformtext_mode="hide"
     )
 
-    if chart_y_title == "Κάλυψη %":
+    if is_percent:
         fig.update_layout(
-            yaxis_range=[0, 110]
+            yaxis_range=[0, 100]
         )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
+    if is_score:
+        fig.update_layout(
+            yaxis_range=[0, 20000]
+        )
+
+    if integer_axis:
+        fig.update_layout(
+            yaxis=dict(dtick=1)
+        )
+
+    return fig
+
+
+def show_ranking(
+    source_df,
+    sort_column,
+    ascending,
+    top_n,
+    table_formatter,
+    chart_y_col,
+    title,
+    is_percent=False,
+    is_score=False,
+    integer_axis=False
+):
+    """
+    Εμφανίζει ranking με πίνακα και γράφημα.
+    """
+
+    ranking_df = (
+        source_df
+        .dropna(subset=[sort_column])
+        .sort_values(sort_column, ascending=ascending)
+        .head(top_n)
+        .copy()
     )
+
+    if ranking_df.empty:
+        st.warning("Δεν υπάρχουν διαθέσιμα δεδομένα για αυτό το ranking.")
+        return
+
+    display_df = table_formatter(ranking_df)
+
+    col_table, col_chart = st.columns([1, 1.4])
+
+    with col_table:
+        st.dataframe(
+            style_table(display_df),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with col_chart:
+        fig = build_chart(
+            display_df=display_df,
+            x_col="Προπτυχιακό Πρόγραμμα",
+            y_col=chart_y_col,
+            title=title,
+            yaxis_title=chart_y_col,
+            is_percent=is_percent,
+            is_score=is_score,
+            integer_axis=integer_axis
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
 
 try:
@@ -304,10 +570,6 @@ try:
     if df.empty:
         st.warning("Δεν υπάρχουν ακόμη δεδομένα εισακτέων στη βάση.")
         st.stop()
-
-    # ---------------------------------------------------------
-    # Φίλτρο έτους
-    # ---------------------------------------------------------
 
     years = sorted(df["year"].dropna().unique().tolist())
 
@@ -322,7 +584,7 @@ try:
 
     with col_topn:
         top_n = st.slider(
-            "Πλήθος Τμημάτων στο ranking",
+            "Πλήθος προγραμμάτων στο ranking",
             min_value=3,
             max_value=23,
             value=10,
@@ -338,14 +600,10 @@ try:
     department_summary = build_department_summary(df_year)
 
     if department_summary.empty:
-        st.warning("Δεν δημιουργήθηκε σύνοψη Τμημάτων.")
+        st.warning("Δεν δημιουργήθηκε σύνοψη προγραμμάτων.")
         st.stop()
 
-    # ---------------------------------------------------------
-    # KPIs
-    # ---------------------------------------------------------
-
-    total_departments = department_summary["department_code"].nunique()
+    total_programs = int(department_summary["department_code"].nunique())
     total_positions = int(department_summary["total_positions"].sum())
     total_admitted = int(department_summary["total_admitted"].sum())
     total_empty = int(department_summary["empty_positions"].sum())
@@ -356,16 +614,18 @@ try:
         else 0
     )
 
-    gel_day_available = department_summary["gel_day_base_score"].notna().sum()
+    gel_day_available = int(
+        department_summary["gel_day_base_score"].notna().sum()
+    )
 
-    st.subheader(f"Rankings Τμημάτων για το έτος {selected_year}")
+    st.subheader(f"Rankings για το έτος {selected_year}")
 
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
     with kpi1:
         st.metric(
-            "Τμήματα",
-            total_departments
+            "Ενεργά Προπτυχιακά Προγράμματα",
+            total_programs
         )
 
     with kpi2:
@@ -383,7 +643,7 @@ try:
     with kpi4:
         st.metric(
             "Συνολική Κάλυψη",
-            f"{total_coverage:.1f}%"
+            f"{total_coverage:.2f}%"
         )
 
     kpi5, kpi6 = st.columns(2)
@@ -396,7 +656,7 @@ try:
 
     with kpi6:
         st.metric(
-            "Τμήματα με Βάση ΓΕΛ Ημ.",
+            "Προγράμματα με Βάση ΓΕΛ Ημ.",
             gel_day_available
         )
 
@@ -408,148 +668,200 @@ try:
 
     st.divider()
 
-    # ---------------------------------------------------------
-    # Tabs Rankings
-    # ---------------------------------------------------------
-
-    tab1, tab2, tab3, tab4 = st.tabs(
+    tab_base, tab_admitted, tab_coverage, tab_empty, tab_positions = st.tabs(
         [
             "Βάσεις ΓΕΛ Ημ.",
             "Επιτυχόντες",
             "Κάλυψη",
             "Κενές Θέσεις",
+            "Θέσεις",
         ]
     )
 
-    with tab1:
+    with tab_base:
         st.subheader("Rankings βάσης ΓΕΛ Ημερήσια")
 
-        subtab1, subtab2 = st.tabs(
+        subtab_base_high, subtab_base_low, subtab_first_high = st.tabs(
             [
                 "Υψηλότερες βάσεις",
                 "Χαμηλότερες βάσεις",
+                "Υψηλότερος πρώτος",
             ]
         )
 
-        with subtab1:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_base_high:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="gel_day_base_score",
                 ascending=False,
                 top_n=top_n,
+                table_formatter=format_base_ranking_table,
+                chart_y_col="Βάση ΓΕΛ Ημ.",
                 title="Υψηλότερες βάσεις ΓΕΛ Ημερήσια",
-                chart_y_title="Βάση ΓΕΛ Ημ."
+                is_score=True
             )
 
-        with subtab2:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_base_low:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="gel_day_base_score",
                 ascending=True,
                 top_n=top_n,
+                table_formatter=format_base_ranking_table,
+                chart_y_col="Βάση ΓΕΛ Ημ.",
                 title="Χαμηλότερες βάσεις ΓΕΛ Ημερήσια",
-                chart_y_title="Βάση ΓΕΛ Ημ."
+                is_score=True
             )
 
-    with tab2:
+        with subtab_first_high:
+            show_ranking(
+                source_df=department_summary,
+                sort_column="gel_day_first_score",
+                ascending=False,
+                top_n=top_n,
+                table_formatter=format_first_score_ranking_table,
+                chart_y_col="Πρώτος ΓΕΛ Ημ.",
+                title="Υψηλότερα μόρια πρώτου ΓΕΛ Ημερήσια",
+                is_score=True
+            )
+
+    with tab_admitted:
         st.subheader("Rankings επιτυχόντων")
 
-        subtab3, subtab4 = st.tabs(
+        subtab_admitted_high, subtab_admitted_low = st.tabs(
             [
                 "Περισσότεροι επιτυχόντες",
                 "Λιγότεροι επιτυχόντες",
             ]
         )
 
-        with subtab3:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_admitted_high:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="total_admitted",
                 ascending=False,
                 top_n=top_n,
-                title="Τμήματα με περισσότερους επιτυχόντες",
-                chart_y_title="Επιτυχόντες"
+                table_formatter=format_admitted_ranking_table,
+                chart_y_col="Επιτυχόντες",
+                title="Προγράμματα με περισσότερους επιτυχόντες"
             )
 
-        with subtab4:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_admitted_low:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="total_admitted",
                 ascending=True,
                 top_n=top_n,
-                title="Τμήματα με λιγότερους επιτυχόντες",
-                chart_y_title="Επιτυχόντες"
+                table_formatter=format_admitted_ranking_table,
+                chart_y_col="Επιτυχόντες",
+                title="Προγράμματα με λιγότερους επιτυχόντες"
             )
 
-    with tab3:
+    with tab_coverage:
         st.subheader("Rankings κάλυψης")
 
-        subtab5, subtab6 = st.tabs(
+        subtab_coverage_high, subtab_coverage_low = st.tabs(
             [
                 "Υψηλότερη κάλυψη",
                 "Χαμηλότερη κάλυψη",
             ]
         )
 
-        with subtab5:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_coverage_high:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="coverage",
                 ascending=False,
                 top_n=top_n,
-                title="Τμήματα με υψηλότερη συνολική κάλυψη",
-                chart_y_title="Κάλυψη %"
+                table_formatter=format_coverage_ranking_table,
+                chart_y_col="Κάλυψη %",
+                title="Προγράμματα με υψηλότερη συνολική κάλυψη",
+                is_percent=True
             )
 
-        with subtab6:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_coverage_low:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="coverage",
                 ascending=True,
                 top_n=top_n,
-                title="Τμήματα με χαμηλότερη συνολική κάλυψη",
-                chart_y_title="Κάλυψη %"
+                table_formatter=format_coverage_ranking_table,
+                chart_y_col="Κάλυψη %",
+                title="Προγράμματα με χαμηλότερη συνολική κάλυψη",
+                is_percent=True
             )
 
-    with tab4:
+    with tab_empty:
         st.subheader("Rankings κενών θέσεων")
 
-        subtab7, subtab8 = st.tabs(
+        subtab_empty_high, subtab_empty_low = st.tabs(
             [
                 "Περισσότερες κενές θέσεις",
                 "Λιγότερες κενές θέσεις",
             ]
         )
 
-        with subtab7:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_empty_high:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="empty_positions",
                 ascending=False,
                 top_n=top_n,
-                title="Τμήματα με περισσότερες κενές θέσεις",
-                chart_y_title="Κενές Θέσεις"
+                table_formatter=format_empty_ranking_table,
+                chart_y_col="Κενές Θέσεις",
+                title="Προγράμματα με περισσότερες κενές θέσεις",
+                integer_axis=True
             )
 
-        with subtab8:
-            show_ranking_table_and_chart(
-                df=department_summary,
+        with subtab_empty_low:
+            show_ranking(
+                source_df=department_summary,
                 sort_column="empty_positions",
                 ascending=True,
                 top_n=top_n,
-                title="Τμήματα με λιγότερες κενές θέσεις",
-                chart_y_title="Κενές Θέσεις"
+                table_formatter=format_empty_ranking_table,
+                chart_y_col="Κενές Θέσεις",
+                title="Προγράμματα με λιγότερες κενές θέσεις",
+                integer_axis=True
+            )
+
+    with tab_positions:
+        st.subheader("Rankings συνολικών θέσεων")
+
+        subtab_positions_high, subtab_positions_low = st.tabs(
+            [
+                "Περισσότερες θέσεις",
+                "Λιγότερες θέσεις",
+            ]
+        )
+
+        with subtab_positions_high:
+            show_ranking(
+                source_df=department_summary,
+                sort_column="total_positions",
+                ascending=False,
+                top_n=top_n,
+                table_formatter=format_positions_ranking_table,
+                chart_y_col="Συνολικές Θέσεις",
+                title="Προγράμματα με περισσότερες συνολικές θέσεις"
+            )
+
+        with subtab_positions_low:
+            show_ranking(
+                source_df=department_summary,
+                sort_column="total_positions",
+                ascending=True,
+                top_n=top_n,
+                table_formatter=format_positions_ranking_table,
+                chart_y_col="Συνολικές Θέσεις",
+                title="Προγράμματα με λιγότερες συνολικές θέσεις"
             )
 
     st.divider()
 
-    # ---------------------------------------------------------
-    # Πλήρης πίνακας
-    # ---------------------------------------------------------
+    st.subheader("Συνοπτικός πίνακας όλων των προγραμμάτων")
 
-    st.subheader("Πλήρης πίνακας rankings")
-
-    full_display = format_display_table(
+    full_display = format_full_table(
         department_summary.sort_values(
             "gel_day_base_score",
             ascending=False,
@@ -558,9 +870,14 @@ try:
     )
 
     st.dataframe(
-        style_rank_table(full_display),
+        style_table(full_display),
         use_container_width=True,
         hide_index=True
+    )
+
+    st.caption(
+        "Ο πίνακας κρατά τις βασικές πληροφορίες για γρήγορη αναζήτηση: "
+        "θέσεις, επιτυχόντες, κάλυψη και Βάση ΓΕΛ Ημερήσια."
     )
 
 except Exception as e:

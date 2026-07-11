@@ -17,7 +17,8 @@ st.set_page_config(
 st.title("📈 Σύγκριση Ετών Εισακτέων ΔΙ.ΠΑ.Ε.")
 
 st.markdown("""
-Σε αυτή τη σελίδα συγκρίνουμε τα δεδομένα εισακτέων του ΔΙ.ΠΑ.Ε. μεταξύ δύο ετών.
+Σε αυτή τη σελίδα συγκρίνουμε τα δεδομένα εισακτέων των ενεργών προπτυχιακών
+προγραμμάτων σπουδών του ΔΙ.ΠΑ.Ε. μεταξύ δύο ετών.
 
 **Μεθοδολογικοί κανόνες της εφαρμογής:**
 
@@ -26,7 +27,7 @@ st.markdown("""
 - Η **Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
 - Δεν χρησιμοποιούνται μέσοι όροι βάσεων ή μέσοι όροι πρώτου υποψηφίου σε επίπεδο Σχολής/Πόλης.
-- Η **Βάση ΓΕΛ Ημερήσια** και ο **Πρώτος ΓΕΛ Ημερήσια** χρησιμοποιούνται μόνο σε επίπεδο Τμήματος.
+- Η **Βάση ΓΕΛ Ημερήσια** και ο **Πρώτος ΓΕΛ Ημερήσια** χρησιμοποιούνται μόνο σε επίπεδο προπτυχιακού προγράμματος.
 """)
 
 st.divider()
@@ -34,8 +35,8 @@ st.divider()
 
 def get_gel_day_scores(df_year):
     """
-    Επιστρέφει βάση τελευταίου και βαθμό πρώτου από τη ΓΕΛ Ημερήσια ανά Τμήμα.
-    Χρησιμοποιείται μόνο σε επίπεδο Τμήματος.
+    Επιστρέφει βάση τελευταίου και βαθμό πρώτου από τη ΓΕΛ Ημερήσια ανά πρόγραμμα.
+    Χρησιμοποιείται μόνο σε επίπεδο προπτυχιακού προγράμματος.
     """
 
     df_gel = df_year[
@@ -67,7 +68,7 @@ def get_gel_day_scores(df_year):
 
 def build_department_summary(df_year):
     """
-    Δημιουργεί σύνοψη ανά Τμήμα για όλες τις κατηγορίες.
+    Δημιουργεί σύνοψη ανά ενεργό προπτυχιακό πρόγραμμα για όλες τις κατηγορίες.
 
     Οι συνολικές θέσεις είναι οι αρχικές θέσεις.
     Οι βάσεις προέρχονται από τη ΓΕΛ Ημερήσια.
@@ -127,7 +128,7 @@ def build_group_summary(department_summary, group_field):
         department_summary
         .groupby(group_field, as_index=False)
         .agg(
-            departments=("department_code", "nunique"),
+            programs=("department_code", "nunique"),
             total_positions=("total_positions", "sum"),
             total_admitted=("total_admitted", "sum"),
             empty_positions=("empty_positions", "sum"),
@@ -145,7 +146,7 @@ def build_group_summary(department_summary, group_field):
 
 def compare_department_summaries(old_df, new_df, old_year, new_year):
     """
-    Συγκρίνει δύο ετήσιες συνόψεις Τμημάτων.
+    Συγκρίνει δύο ετήσιες συνόψεις προγραμμάτων.
     """
 
     old = old_df.rename(
@@ -251,7 +252,7 @@ def compare_group_summaries(old_df, new_df, group_field, old_year, new_year):
 
     old = old_df.rename(
         columns={
-            "departments": f"departments_{old_year}",
+            "programs": f"programs_{old_year}",
             "total_positions": f"total_positions_{old_year}",
             "total_admitted": f"total_admitted_{old_year}",
             "empty_positions": f"empty_positions_{old_year}",
@@ -261,7 +262,7 @@ def compare_group_summaries(old_df, new_df, group_field, old_year, new_year):
 
     new = new_df.rename(
         columns={
-            "departments": f"departments_{new_year}",
+            "programs": f"programs_{new_year}",
             "total_positions": f"total_positions_{new_year}",
             "total_admitted": f"total_admitted_{new_year}",
             "empty_positions": f"empty_positions_{new_year}",
@@ -276,8 +277,8 @@ def compare_group_summaries(old_df, new_df, group_field, old_year, new_year):
     )
 
     for col in [
-        f"departments_{old_year}",
-        f"departments_{new_year}",
+        f"programs_{old_year}",
+        f"programs_{new_year}",
         f"total_positions_{old_year}",
         f"total_positions_{new_year}",
         f"total_admitted_{old_year}",
@@ -297,9 +298,9 @@ def compare_group_summaries(old_df, new_df, group_field, old_year, new_year):
         if col not in comparison.columns:
             comparison[col] = None
 
-    comparison["diff_departments"] = (
-        comparison[f"departments_{new_year}"]
-        - comparison[f"departments_{old_year}"]
+    comparison["diff_programs"] = (
+        comparison[f"programs_{new_year}"]
+        - comparison[f"programs_{old_year}"]
     )
 
     comparison["diff_total_positions"] = (
@@ -327,7 +328,7 @@ def compare_group_summaries(old_df, new_df, group_field, old_year, new_year):
 
 def format_department_comparison_table(df, old_year, new_year):
     """
-    Μορφοποιεί τον πίνακα σύγκρισης Τμημάτων.
+    Μορφοποιεί τον αναλυτικό πίνακα σύγκρισης προγραμμάτων.
     """
 
     display = df[
@@ -358,7 +359,7 @@ def format_department_comparison_table(df, old_year, new_year):
 
     display = display.rename(
         columns={
-            "department_name_clean": "Τμήμα",
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
             "school": "Σχολή",
             "city": "Πόλη",
             f"total_positions_{old_year}": f"Συνολικές Θέσεις {old_year}",
@@ -383,9 +384,26 @@ def format_department_comparison_table(df, old_year, new_year):
     )
 
     for col in [
+        f"Συνολικές Θέσεις {old_year}",
+        f"Συνολικές Θέσεις {new_year}",
+        "Διαφορά Θέσεων",
+        f"Επιτυχόντες {old_year}",
+        f"Επιτυχόντες {new_year}",
+        "Διαφορά Επιτυχόντων",
+        f"Κενές Θέσεις {old_year}",
+        f"Κενές Θέσεις {new_year}",
+        "Διαφορά Κενών",
+    ]:
+        display[col] = display[col].fillna(0).round(0).astype(int)
+
+    for col in [
         f"Κάλυψη % {old_year}",
         f"Κάλυψη % {new_year}",
         "Διαφορά Κάλυψης",
+    ]:
+        display[col] = display[col].round(2)
+
+    for col in [
         f"Πρώτος ΓΕΛ Ημ. {old_year}",
         f"Πρώτος ΓΕΛ Ημ. {new_year}",
         "Διαφορά Πρώτου ΓΕΛ Ημ.",
@@ -393,7 +411,37 @@ def format_department_comparison_table(df, old_year, new_year):
         f"Βάση ΓΕΛ Ημ. {new_year}",
         "Διαφορά Βάσης ΓΕΛ Ημ.",
     ]:
-        display[col] = display[col].round(2)
+        display[col] = display[col].fillna(0).round(0).astype(int)
+
+    return display
+
+
+def format_clean_department_table(df, old_year, new_year):
+    """
+    Καθαρότερος πίνακας σύγκρισης προγραμμάτων.
+    """
+
+    full = format_department_comparison_table(df, old_year, new_year)
+
+    display = full[
+        [
+            "Προπτυχιακό Πρόγραμμα",
+            "Σχολή",
+            "Πόλη",
+            f"Συνολικές Θέσεις {old_year}",
+            f"Συνολικές Θέσεις {new_year}",
+            "Διαφορά Θέσεων",
+            f"Επιτυχόντες {old_year}",
+            f"Επιτυχόντες {new_year}",
+            "Διαφορά Επιτυχόντων",
+            f"Κάλυψη % {old_year}",
+            f"Κάλυψη % {new_year}",
+            "Διαφορά Κάλυψης",
+            f"Βάση ΓΕΛ Ημ. {old_year}",
+            f"Βάση ΓΕΛ Ημ. {new_year}",
+            "Διαφορά Βάσης ΓΕΛ Ημ.",
+        ]
+    ].copy()
 
     return display
 
@@ -406,9 +454,9 @@ def format_group_comparison_table(df, group_field, group_label, old_year, new_ye
     display = df[
         [
             group_field,
-            f"departments_{old_year}",
-            f"departments_{new_year}",
-            "diff_departments",
+            f"programs_{old_year}",
+            f"programs_{new_year}",
+            "diff_programs",
             f"total_positions_{old_year}",
             f"total_positions_{new_year}",
             "diff_total_positions",
@@ -427,9 +475,9 @@ def format_group_comparison_table(df, group_field, group_label, old_year, new_ye
     display = display.rename(
         columns={
             group_field: group_label,
-            f"departments_{old_year}": f"Τμήματα {old_year}",
-            f"departments_{new_year}": f"Τμήματα {new_year}",
-            "diff_departments": "Διαφορά Τμημάτων",
+            f"programs_{old_year}": f"Προγράμματα {old_year}",
+            f"programs_{new_year}": f"Προγράμματα {new_year}",
+            "diff_programs": "Διαφορά Προγραμμάτων",
             f"total_positions_{old_year}": f"Συνολικές Θέσεις {old_year}",
             f"total_positions_{new_year}": f"Συνολικές Θέσεις {new_year}",
             "diff_total_positions": "Διαφορά Θέσεων",
@@ -444,6 +492,22 @@ def format_group_comparison_table(df, group_field, group_label, old_year, new_ye
             "diff_coverage": "Διαφορά Κάλυψης",
         }
     )
+
+    for col in [
+        f"Προγράμματα {old_year}",
+        f"Προγράμματα {new_year}",
+        "Διαφορά Προγραμμάτων",
+        f"Συνολικές Θέσεις {old_year}",
+        f"Συνολικές Θέσεις {new_year}",
+        "Διαφορά Θέσεων",
+        f"Επιτυχόντες {old_year}",
+        f"Επιτυχόντες {new_year}",
+        "Διαφορά Επιτυχόντων",
+        f"Κενές Θέσεις {old_year}",
+        f"Κενές Θέσεις {new_year}",
+        "Διαφορά Κενών",
+    ]:
+        display[col] = display[col].fillna(0).round(0).astype(int)
 
     for col in [
         f"Κάλυψη % {old_year}",
@@ -479,14 +543,25 @@ def highlight_difference(val):
 def style_comparison_table(df):
     """
     Styling πινάκων σύγκρισης.
+
+    Όλες οι στήλες κάλυψης και διαφοράς κάλυψης εμφανίζονται με 2 δεκαδικά και %.
     """
+
+    style_obj = df.style
+
+    format_dict = {}
+
+    for col in df.columns:
+        if "Κάλυψη %" in col or col == "Διαφορά Κάλυψης":
+            format_dict[col] = "{:.2f}%"
+
+    if format_dict:
+        style_obj = style_obj.format(format_dict)
 
     diff_columns = [
         col for col in df.columns
         if col.startswith("Διαφορά")
     ]
-
-    style_obj = df.style
 
     if diff_columns:
         try:
@@ -504,7 +579,8 @@ def style_comparison_table(df):
 
 
 def create_excel_export(
-    department_display,
+    clean_department_display,
+    full_department_display,
     school_display,
     city_display,
     old_year,
@@ -517,10 +593,16 @@ def create_excel_export(
     output = io.BytesIO()
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        department_display.to_excel(
+        clean_department_display.to_excel(
             writer,
             index=False,
-            sheet_name="Ανά Τμήμα"
+            sheet_name="Ανά Πρόγραμμα"
+        )
+
+        full_department_display.to_excel(
+            writer,
+            index=False,
+            sheet_name="Αναλυτικά Προγράμματα"
         )
 
         school_display.to_excel(
@@ -543,7 +625,9 @@ def create_excel_export(
                     "Η Κάλυψη υπολογίζεται ως Επιτυχόντες / Συνολικές Θέσεις.",
                     "Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.",
                     "Δεν υπολογίζονται μέσοι όροι βάσεων σε επίπεδο Σχολής ή Πόλης.",
-                    "Η Βάση ΓΕΛ Ημερήσια και ο Πρώτος ΓΕΛ Ημερήσια εμφανίζονται μόνο σε επίπεδο Τμήματος.",
+                    "Η Βάση ΓΕΛ Ημερήσια και ο Πρώτος ΓΕΛ Ημερήσια εμφανίζονται μόνο σε επίπεδο προπτυχιακού προγράμματος.",
+                    "Οι βάσεις και τα μόρια πρώτου εμφανίζονται χωρίς δεκαδικά.",
+                    "Τα ποσοστά κάλυψης και οι διαφορές κάλυψης εμφανίζονται με δύο δεκαδικά.",
                 ]
             }
         )
@@ -570,10 +654,6 @@ try:
     if len(years) < 2:
         st.warning("Χρειάζονται τουλάχιστον δύο έτη δεδομένων για σύγκριση.")
         st.stop()
-
-    # ---------------------------------------------------------
-    # Επιλογή ετών
-    # ---------------------------------------------------------
 
     col_old, col_new = st.columns(2)
 
@@ -620,10 +700,6 @@ try:
         st.warning("Δεν υπάρχουν πλήρη δεδομένα για τα επιλεγμένα έτη.")
         st.stop()
 
-    # ---------------------------------------------------------
-    # Δημιουργία συνόψεων
-    # ---------------------------------------------------------
-
     old_department_summary = build_department_summary(df_old)
     new_department_summary = build_department_summary(df_new)
 
@@ -669,10 +745,6 @@ try:
         old_year,
         new_year
     )
-
-    # ---------------------------------------------------------
-    # Συνολικά KPIs
-    # ---------------------------------------------------------
 
     old_total_positions = int(old_department_summary["total_positions"].sum())
     new_total_positions = int(new_department_summary["total_positions"].sum())
@@ -732,21 +804,21 @@ try:
     with kpi4:
         st.metric(
             "Συνολική Κάλυψη",
-            f"{new_total_coverage:.1f}%",
-            delta=f"{new_total_coverage - old_total_coverage:.1f}%"
+            f"{new_total_coverage:.2f}%",
+            delta=f"{new_total_coverage - old_total_coverage:.2f}%"
         )
 
     kpi5, kpi6 = st.columns(2)
 
     with kpi5:
         st.metric(
-            f"Τμήματα με Βάση ΓΕΛ Ημ. {old_year}",
+            f"Προγράμματα με Βάση ΓΕΛ Ημ. {old_year}",
             int(old_gel_available)
         )
 
     with kpi6:
         st.metric(
-            f"Τμήματα με Βάση ΓΕΛ Ημ. {new_year}",
+            f"Προγράμματα με Βάση ΓΕΛ Ημ. {new_year}",
             int(new_gel_available),
             delta=int(new_gel_available - old_gel_available)
         )
@@ -754,16 +826,12 @@ try:
     st.caption(
         "Η σύγκριση γίνεται για όλες τις κατηγορίες εισαγωγής. "
         "Οι Συνολικές Θέσεις είναι οι αρχικές θέσεις. "
-        "Οι βάσεις ΓΕΛ Ημερήσια εμφανίζονται μόνο σε επίπεδο Τμήματος."
+        "Οι βάσεις ΓΕΛ Ημερήσια εμφανίζονται μόνο σε επίπεδο προπτυχιακού προγράμματος."
     )
 
     st.divider()
 
-    # ---------------------------------------------------------
-    # Γραφήματα
-    # ---------------------------------------------------------
-
-    st.subheader("Γραφήματα μεταβολών ανά Τμήμα")
+    st.subheader("Γραφήματα μεταβολών ανά πρόγραμμα")
 
     chart_col1, chart_col2 = st.columns(2)
 
@@ -784,7 +852,7 @@ try:
         )
 
         fig_admitted.update_layout(
-            xaxis_title="Τμήμα",
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
             yaxis_title="Διαφορά Επιτυχόντων"
         )
 
@@ -810,7 +878,7 @@ try:
         )
 
         fig_admitted_down.update_layout(
-            xaxis_title="Τμήμα",
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
             yaxis_title="Διαφορά Επιτυχόντων"
         )
 
@@ -842,7 +910,7 @@ try:
         )
 
         fig_base_up.update_layout(
-            xaxis_title="Τμήμα",
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
             yaxis_title="Διαφορά Βάσης ΓΕΛ Ημ."
         )
 
@@ -872,7 +940,7 @@ try:
         )
 
         fig_base_down.update_layout(
-            xaxis_title="Τμήμα",
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
             yaxis_title="Διαφορά Βάσης ΓΕΛ Ημ."
         )
 
@@ -881,15 +949,77 @@ try:
             use_container_width=True
         )
 
-    st.divider()
+    chart_col5, chart_col6 = st.columns(2)
 
-    # ---------------------------------------------------------
-    # Πίνακες
-    # ---------------------------------------------------------
+    with chart_col5:
+        fig_coverage = px.bar(
+            department_comparison.sort_values(
+                "diff_coverage",
+                ascending=False
+            ).head(10),
+            x="department_name_clean",
+            y="diff_coverage",
+            text="diff_coverage",
+            title=f"Top-10 αυξήσεις κάλυψης {old_year} → {new_year}"
+        )
+
+        fig_coverage.update_traces(
+            texttemplate="%{text:.2f}%",
+            textposition="outside"
+        )
+
+        fig_coverage.update_layout(
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
+            yaxis_title="Διαφορά Κάλυψης"
+        )
+
+        st.plotly_chart(
+            fig_coverage,
+            use_container_width=True
+        )
+
+    with chart_col6:
+        fig_coverage_down = px.bar(
+            department_comparison.sort_values(
+                "diff_coverage",
+                ascending=True
+            ).head(10),
+            x="department_name_clean",
+            y="diff_coverage",
+            text="diff_coverage",
+            title=f"Top-10 μειώσεις κάλυψης {old_year} → {new_year}"
+        )
+
+        fig_coverage_down.update_traces(
+            texttemplate="%{text:.2f}%",
+            textposition="outside"
+        )
+
+        fig_coverage_down.update_layout(
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
+            yaxis_title="Διαφορά Κάλυψης"
+        )
+
+        st.plotly_chart(
+            fig_coverage_down,
+            use_container_width=True
+        )
+
+    st.divider()
 
     st.subheader("Αναλυτικοί πίνακες σύγκρισης")
 
-    department_display = format_department_comparison_table(
+    full_department_display = format_department_comparison_table(
+        department_comparison.sort_values(
+            "diff_gel_day_base_score",
+            ascending=False,
+            na_position="last"
+        ),
+        old_year,
+        new_year
+    )
+
+    clean_department_display = format_clean_department_table(
         department_comparison.sort_values(
             "diff_gel_day_base_score",
             ascending=False,
@@ -921,23 +1051,35 @@ try:
         new_year
     )
 
-    tab_dept, tab_school, tab_city = st.tabs(
+    tab_clean, tab_full, tab_school, tab_city = st.tabs(
         [
-            "Ανά Τμήμα",
+            "Συνοπτικά ανά Πρόγραμμα",
+            "Αναλυτικά ανά Πρόγραμμα",
             "Ανά Σχολή",
             "Ανά Πόλη",
         ]
     )
 
-    with tab_dept:
+    with tab_clean:
         st.dataframe(
-            style_comparison_table(department_display),
+            style_comparison_table(clean_department_display),
             use_container_width=True,
             hide_index=True
         )
 
         st.caption(
-            "Η Βάση ΓΕΛ Ημερήσια και ο Πρώτος ΓΕΛ Ημερήσια εμφανίζονται μόνο σε επίπεδο Τμήματος."
+            "Συνοπτικός πίνακας με τις βασικές μεταβολές: θέσεις, επιτυχόντες, κάλυψη και Βάση ΓΕΛ Ημερήσια."
+        )
+
+    with tab_full:
+        st.dataframe(
+            style_comparison_table(full_department_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.caption(
+            "Αναλυτικός πίνακας που περιλαμβάνει και Κενές Θέσεις / Πρώτο ΓΕΛ Ημερήσια."
         )
 
     with tab_school:
@@ -956,14 +1098,11 @@ try:
 
     st.divider()
 
-    # ---------------------------------------------------------
-    # Export Excel
-    # ---------------------------------------------------------
-
     st.subheader("Εξαγωγή αποτελεσμάτων")
 
     excel_file = create_excel_export(
-        department_display=department_display,
+        clean_department_display=clean_department_display,
+        full_department_display=full_department_display,
         school_display=school_display,
         city_display=city_display,
         old_year=old_year,

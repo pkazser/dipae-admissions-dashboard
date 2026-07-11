@@ -13,17 +13,17 @@ st.set_page_config(
 st.title("📋 Δεδομένα Εισακτέων ΔΙ.ΠΑ.Ε.")
 
 st.markdown("""
-Σε αυτή τη σελίδα προβάλλονται τα δεδομένα εισακτέων του ΔΙ.ΠΑ.Ε. ανά έτος,
-Τμήμα και κατηγορία εισαγωγής.
+Σε αυτή τη σελίδα προβάλλονται τα δεδομένα εισακτέων των ενεργών προπτυχιακών
+προγραμμάτων σπουδών του ΔΙ.ΠΑ.Ε. ανά έτος.
 
 **Μεθοδολογικοί κανόνες της εφαρμογής:**
 
-- Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες**.
+- Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
 - Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
 - Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
-- Η **Βάση Τμήματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
-- Ο **Πρώτος Τμήματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
-- Δεν εμφανίζεται άθροισμα τελικών θέσεων ή φαινόμενη μεταβολή θέσεων.
+- Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
+- Ο **Πρώτος Προγράμματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
+- Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
 """)
 
 st.divider()
@@ -31,8 +31,7 @@ st.divider()
 
 def get_gel_day_scores(df_year):
     """
-    Επιστρέφει Βάση Τελευταίου και Βαθμό Πρώτου από τη ΓΕΛ Ημερήσια ανά Τμήμα.
-    Αυτές οι τιμές χρησιμοποιούνται ως βασικοί δείκτες βάσης/ζήτησης.
+    Επιστρέφει τη βάση και τον βαθμό πρώτου της ΓΕΛ Ημερήσια ανά πρόγραμμα.
     """
 
     df_gel = df_year[
@@ -64,10 +63,10 @@ def get_gel_day_scores(df_year):
 
 def build_department_summary(df_year):
     """
-    Δημιουργεί σύνοψη ανά Τμήμα.
+    Δημιουργεί σύνοψη ανά ενεργό προπτυχιακό πρόγραμμα.
 
-    Η ανάλυση γίνεται πάντα για όλες τις κατηγορίες.
-    Οι συνολικές θέσεις είναι το άθροισμα των αρχικών θέσεων.
+    Η ανάλυση γίνεται για όλες τις κατηγορίες.
+    Οι συνολικές θέσεις είναι οι αρχικές θέσεις.
     Οι βάσεις προέρχονται από τη ΓΕΛ Ημερήσια.
     """
 
@@ -114,9 +113,54 @@ def build_department_summary(df_year):
     return summary
 
 
-def format_department_summary(df):
+def format_summary_table(df):
     """
-    Μορφοποιεί τη σύνοψη ανά Τμήμα για εμφάνιση.
+    Συνοπτικός πίνακας ανά πρόγραμμα.
+
+    Δεν εμφανίζουμε Πρώτο ΓΕΛ Ημ. και Κενές Θέσεις εδώ,
+    ώστε ο πίνακας να είναι καθαρός και να φαίνεται εύκολα η βάση.
+    """
+
+    display = df[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "total_positions",
+            "total_admitted",
+            "coverage",
+            "gel_day_base_score",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "total_positions": "Συνολικές Θέσεις",
+            "total_admitted": "Επιτυχόντες",
+            "coverage": "Κάλυψη %",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
+        }
+    )
+
+    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+
+    display["Βάση ΓΕΛ Ημ."] = (
+        display["Βάση ΓΕΛ Ημ."]
+        .fillna(0)
+        .round(0)
+        .astype(int)
+    )
+
+    return display
+
+
+def format_detailed_summary_table(df):
+    """
+    Αναλυτικότερη σύνοψη ανά πρόγραμμα.
+    Περιλαμβάνει και κενές θέσεις / πρώτο ΓΕΛ Ημ. για περισσότερη πληροφορία.
     """
 
     display = df[
@@ -135,7 +179,7 @@ def format_department_summary(df):
 
     display = display.rename(
         columns={
-            "department_name_clean": "Τμήμα",
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
             "school": "Σχολή",
             "city": "Πόλη",
             "total_positions": "Συνολικές Θέσεις",
@@ -147,12 +191,18 @@ def format_department_summary(df):
         }
     )
 
+    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+
     for col in [
-        "Κάλυψη %",
         "Πρώτος ΓΕΛ Ημ.",
         "Βάση ΓΕΛ Ημ.",
     ]:
-        display[col] = display[col].round(2)
+        display[col] = (
+            display[col]
+            .fillna(0)
+            .round(0)
+            .astype(int)
+        )
 
     return display
 
@@ -161,8 +211,8 @@ def format_raw_table(df):
     """
     Μορφοποιεί τον αναλυτικό πίνακα εγγραφών ανά κατηγορία.
 
-    Εδώ εμφανίζουμε τις αρχικές θέσεις, τους επιτυχόντες και τις βάσεις ανά κατηγορία,
-    χωρίς να εμφανίζουμε τελικές θέσεις ή φαινόμενες μεταβολές.
+    Εδώ εμφανίζονται οι αρχικές θέσεις, οι επιτυχόντες και οι βάσεις ανά κατηγορία,
+    χωρίς τελικές θέσεις ή φαινόμενες μεταβολές.
     """
 
     display = df[
@@ -186,7 +236,7 @@ def format_raw_table(df):
         columns={
             "year": "Έτος",
             "exam_category": "Κατηγορία",
-            "department_name_clean": "Τμήμα",
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
             "school": "Σχολή",
             "city": "Πόλη",
             "admission_type": "Είδος Θέσης",
@@ -203,7 +253,12 @@ def format_raw_table(df):
         "Βαθμός Πρώτου",
         "Βάση Τελευταίου",
     ]:
-        display[col] = display[col].round(2)
+        display[col] = (
+            display[col]
+            .fillna(0)
+            .round(0)
+            .astype(int)
+        )
 
     return display
 
@@ -224,6 +279,24 @@ def highlight_empty_positions(val):
         return "background-color: #d4edda; color: #155724; font-weight: bold;"
 
 
+def highlight_coverage(val):
+    """
+    Χρωματισμός κάλυψης.
+    """
+
+    try:
+        value = float(val)
+    except Exception:
+        return ""
+
+    if value >= 100:
+        return "background-color: #d4edda; color: #155724; font-weight: bold;"
+    elif value >= 90:
+        return "background-color: #fff3cd; color: #664d03; font-weight: bold;"
+    else:
+        return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
+
+
 def highlight_gel_day_row(row):
     """
     Επισημαίνει τη ΓΕΛ Ημερήσια στον αναλυτικό πίνακα.
@@ -242,10 +315,20 @@ def highlight_gel_day_row(row):
 
 def style_summary_table(df):
     """
-    Styling σύνοψης ανά Τμήμα.
+    Styling σύνοψης προγραμμάτων.
+
+    Τα ποσοστά κάλυψης εμφανίζονται πάντα με 2 δεκαδικά και σύμβολο %.
     """
 
     style_obj = df.style
+
+    format_dict = {}
+
+    if "Κάλυψη %" in df.columns:
+        format_dict["Κάλυψη %"] = "{:.2f}%"
+
+    if format_dict:
+        style_obj = style_obj.format(format_dict)
 
     if "Κενές Θέσεις" in df.columns:
         try:
@@ -257,6 +340,18 @@ def style_summary_table(df):
             style_obj = style_obj.applymap(
                 highlight_empty_positions,
                 subset=["Κενές Θέσεις"]
+            )
+
+    if "Κάλυψη %" in df.columns:
+        try:
+            style_obj = style_obj.map(
+                highlight_coverage,
+                subset=["Κάλυψη %"]
+            )
+        except AttributeError:
+            style_obj = style_obj.applymap(
+                highlight_coverage,
+                subset=["Κάλυψη %"]
             )
 
     return style_obj
@@ -280,10 +375,6 @@ try:
         st.warning("Δεν υπάρχουν ακόμη δεδομένα εισακτέων στη βάση.")
         st.stop()
 
-    # ---------------------------------------------------------
-    # Φίλτρο έτους
-    # ---------------------------------------------------------
-
     years = sorted(df["year"].dropna().unique().tolist())
 
     selected_year = st.selectbox(
@@ -298,19 +389,11 @@ try:
         st.warning("Δεν υπάρχουν δεδομένα για το επιλεγμένο έτος.")
         st.stop()
 
-    # ---------------------------------------------------------
-    # Σύνοψη ανά Τμήμα
-    # ---------------------------------------------------------
-
     department_summary = build_department_summary(df_year)
 
-    # ---------------------------------------------------------
-    # Κεντρικά KPIs
-    # ---------------------------------------------------------
-
-    total_departments = department_summary["department_code"].nunique()
-    total_schools = department_summary["school"].nunique()
-    total_cities = department_summary["city"].nunique()
+    total_programs = int(department_summary["department_code"].nunique())
+    total_schools = int(department_summary["school"].nunique())
+    total_cities = int(department_summary["city"].nunique())
 
     total_positions = int(department_summary["total_positions"].sum())
     total_admitted = int(department_summary["total_admitted"].sum())
@@ -322,7 +405,9 @@ try:
         else 0
     )
 
-    gel_day_available = department_summary["gel_day_base_score"].notna().sum()
+    gel_day_available = int(
+        department_summary["gel_day_base_score"].notna().sum()
+    )
 
     st.subheader(f"Συνολική εικόνα εισακτέων {selected_year}")
 
@@ -330,8 +415,8 @@ try:
 
     with kpi1:
         st.metric(
-            "Τμήματα",
-            total_departments
+            "Ενεργά Προπτυχιακά Προγράμματα",
+            total_programs
         )
 
     with kpi2:
@@ -369,44 +454,40 @@ try:
     with kpi7:
         st.metric(
             "Συνολική Κάλυψη",
-            f"{total_coverage:.1f}%"
+            f"{total_coverage:.2f}%"
         )
 
     with kpi8:
         st.metric(
-            "Τμήματα με Βάση ΓΕΛ Ημ.",
+            "Προγράμματα με Βάση ΓΕΛ Ημ.",
             gel_day_available
         )
 
     st.caption(
         "Η ανάλυση περιλαμβάνει όλες τις κατηγορίες εισαγωγής. "
         "Οι Συνολικές Θέσεις είναι οι αρχικές θέσεις. "
-        "Η Βάση Τμήματος είναι η Βάση ΓΕΛ Ημερήσια."
+        "Η Βάση Προγράμματος είναι η Βάση ΓΕΛ Ημερήσια."
     )
 
     st.divider()
 
-    # ---------------------------------------------------------
-    # Γραφήματα συνολικής εικόνας
-    # ---------------------------------------------------------
+    st.subheader("Γραφήματα ανά πρόγραμμα")
 
-    st.subheader("Γραφήματα ανά Τμήμα")
-
-    summary_display = format_department_summary(department_summary)
+    summary_display = format_detailed_summary_table(department_summary)
 
     chart_col1, chart_col2 = st.columns(2)
 
     with chart_col1:
         fig_positions = px.bar(
             summary_display.sort_values("Συνολικές Θέσεις", ascending=False),
-            x="Τμήμα",
+            x="Προπτυχιακό Πρόγραμμα",
             y=["Συνολικές Θέσεις", "Επιτυχόντες"],
             barmode="group",
-            title="Συνολικές θέσεις και επιτυχόντες ανά Τμήμα"
+            title="Συνολικές θέσεις και επιτυχόντες ανά πρόγραμμα"
         )
 
         fig_positions.update_layout(
-            xaxis_title="Τμήμα",
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
             yaxis_title="Πλήθος",
             legend_title=""
         )
@@ -419,21 +500,21 @@ try:
     with chart_col2:
         fig_coverage = px.bar(
             summary_display.sort_values("Κάλυψη %", ascending=False),
-            x="Τμήμα",
+            x="Προπτυχιακό Πρόγραμμα",
             y="Κάλυψη %",
             text="Κάλυψη %",
-            title="Συνολική κάλυψη ανά Τμήμα"
+            title="Συνολική κάλυψη ανά πρόγραμμα"
         )
 
         fig_coverage.update_traces(
-            texttemplate="%{text:.1f}%",
+            texttemplate="%{text:.2f}%",
             textposition="outside"
         )
 
         fig_coverage.update_layout(
-            xaxis_title="Τμήμα",
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
             yaxis_title="Κάλυψη %",
-            yaxis_range=[0, 110]
+            yaxis_range=[0, 100]
         )
 
         st.plotly_chart(
@@ -449,10 +530,10 @@ try:
                 "Βάση ΓΕΛ Ημ.",
                 ascending=False
             ),
-            x="Τμήμα",
+            x="Προπτυχιακό Πρόγραμμα",
             y="Βάση ΓΕΛ Ημ.",
             text="Βάση ΓΕΛ Ημ.",
-            title="Βάση ΓΕΛ Ημερήσια ανά Τμήμα"
+            title="Βάση ΓΕΛ Ημερήσια ανά πρόγραμμα"
         )
 
         fig_base.update_traces(
@@ -461,8 +542,9 @@ try:
         )
 
         fig_base.update_layout(
-            xaxis_title="Τμήμα",
-            yaxis_title="Βάση ΓΕΛ Ημερήσια"
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
+            yaxis_title="Βάση ΓΕΛ Ημερήσια",
+            yaxis_range=[0, 20000]
         )
 
         st.plotly_chart(
@@ -473,10 +555,10 @@ try:
     with chart_col4:
         fig_empty = px.bar(
             summary_display.sort_values("Κενές Θέσεις", ascending=False),
-            x="Τμήμα",
+            x="Προπτυχιακό Πρόγραμμα",
             y="Κενές Θέσεις",
             text="Κενές Θέσεις",
-            title="Κενές θέσεις ανά Τμήμα"
+            title="Κενές θέσεις ανά πρόγραμμα"
         )
 
         fig_empty.update_traces(
@@ -484,8 +566,9 @@ try:
         )
 
         fig_empty.update_layout(
-            xaxis_title="Τμήμα",
-            yaxis_title="Κενές Θέσεις"
+            xaxis_title="Προπτυχιακό Πρόγραμμα",
+            yaxis_title="Κενές Θέσεις",
+            yaxis=dict(dtick=1)
         )
 
         st.plotly_chart(
@@ -495,28 +578,46 @@ try:
 
     st.divider()
 
-    # ---------------------------------------------------------
-    # Πίνακες
-    # ---------------------------------------------------------
-
     st.subheader("Πίνακες δεδομένων")
 
-    tab_summary, tab_raw = st.tabs(
+    tab_summary, tab_detailed, tab_raw = st.tabs(
         [
-            "Σύνοψη ανά Τμήμα",
-            "Αναλυτικές εγγραφές ανά κατηγορία",
+            "Συνοπτικός πίνακας",
+            "Αναλυτική σύνοψη",
+            "Εγγραφές ανά κατηγορία",
         ]
     )
 
     with tab_summary:
-        summary_display = summary_display.sort_values(
-            "Βάση ΓΕΛ Ημ.",
-            ascending=False,
-            na_position="last"
+        clean_summary_display = format_summary_table(
+            department_summary.sort_values(
+                "gel_day_base_score",
+                ascending=False,
+                na_position="last"
+            )
         )
 
         st.dataframe(
-            style_summary_table(summary_display),
+            style_summary_table(clean_summary_display),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.caption(
+            "Ο συνοπτικός πίνακας κρατά τις βασικές πληροφορίες ώστε οι βάσεις να εντοπίζονται εύκολα."
+        )
+
+    with tab_detailed:
+        detailed_display = format_detailed_summary_table(
+            department_summary.sort_values(
+                "gel_day_base_score",
+                ascending=False,
+                na_position="last"
+            )
+        )
+
+        st.dataframe(
+            style_summary_table(detailed_display),
             use_container_width=True,
             hide_index=True
         )
@@ -539,7 +640,7 @@ try:
 
         st.caption(
             "Στον αναλυτικό πίνακα η ΓΕΛ Ημερήσια επισημαίνεται με κίτρινο, "
-            "επειδή αποτελεί τη βασική κατηγορία αναφοράς για τη βάση κάθε Τμήματος."
+            "επειδή αποτελεί τη βασική κατηγορία αναφοράς για τη βάση κάθε προγράμματος."
         )
 
 except Exception as e:

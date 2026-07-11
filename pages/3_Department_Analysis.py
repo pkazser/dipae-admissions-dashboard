@@ -4,24 +4,25 @@ from modules.database_manager import load_admissions_with_departments
 
 
 st.set_page_config(
-    page_title="Ανάλυση Τμήματος | ΔΙΠΑΕ",
+    page_title="Ανάλυση Προγράμματος Σπουδών | ΔΙΠΑΕ",
     page_icon="🏛️",
     layout="wide"
 )
 
 
-st.title("🏛️ Ανάλυση Τμήματος ΔΙ.ΠΑ.Ε.")
+st.title("🏛️ Ανάλυση Προπτυχιακού Προγράμματος Σπουδών ΔΙ.ΠΑ.Ε.")
 
 st.markdown("""
-Σε αυτή τη σελίδα εξετάζουμε αναλυτικά κάθε Τμήμα του ΔΙ.ΠΑ.Ε. για το επιλεγμένο έτος.
+Σε αυτή τη σελίδα εξετάζουμε αναλυτικά κάθε ενεργό προπτυχιακό πρόγραμμα σπουδών
+του ΔΙ.ΠΑ.Ε. για το επιλεγμένο έτος.
 
 **Μεθοδολογικοί κανόνες της εφαρμογής:**
 
 - Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
-- Οι **Συνολικές Θέσεις Τμήματος** υπολογίζονται από τις **Αρχικές Θέσεις** όλων των κατηγοριών.
-- Η **Συνολική Κάλυψη Τμήματος** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
-- Η **Βάση Τμήματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
-- Ο **Πρώτος Τμήματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
+- Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις** όλων των κατηγοριών.
+- Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
+- Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
+- Ο **Πρώτος Προγράμματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
 - Στη ΓΕΛ Ημερήσια χρησιμοποιούνται οι θέσεις μετά τις τυχόν μεταφορές από άλλες κατηγορίες.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων ως ξεχωριστοί δείκτες.
 """)
@@ -59,7 +60,7 @@ def safe_float(value, default=None):
 
 def get_gel_day_row(df_department):
     """
-    Επιστρέφει τη γραμμή ΓΕΛ Ημερήσια για το επιλεγμένο Τμήμα.
+    Επιστρέφει τη γραμμή ΓΕΛ Ημερήσια για το επιλεγμένο πρόγραμμα.
     """
 
     df_gel = df_department[
@@ -76,13 +77,10 @@ def build_category_analysis_table(df_department):
     """
     Δημιουργεί πίνακα ανάλυσης ανά κατηγορία.
 
-    Κρίσιμη διόρθωση:
-    - Για τη ΓΕΛ Ημερήσια, οι θέσεις ανάλυσης λαμβάνονται από τις θέσεις μετά
-      τις τυχόν μεταφορές από άλλες κατηγορίες.
-    - Για τις υπόλοιπες κατηγορίες, χρησιμοποιούνται οι αρχικές θέσεις.
+    Για τη ΓΕΛ Ημερήσια, οι θέσεις ανάλυσης λαμβάνονται από τις θέσεις
+    μετά τις τυχόν μεταφορές από άλλες κατηγορίες.
 
-    Έτσι τα γραφήματα κάλυψης και κενών θέσεων δεν εμφανίζουν τεχνητά
-    ποσοστά πάνω από 100% ή αρνητικές κενές θέσεις στη ΓΕΛ Ημερήσια.
+    Για τις υπόλοιπες κατηγορίες, χρησιμοποιούνται οι αρχικές θέσεις.
     """
 
     df_display = df_department.copy()
@@ -142,12 +140,22 @@ def build_category_analysis_table(df_department):
     ]:
         category_table[col] = category_table[col].fillna(0).astype(int)
 
+    category_table["Κάλυψη Κατηγορίας %"] = (
+        category_table["Κάλυψη Κατηγορίας %"]
+        .fillna(0)
+        .round(2)
+    )
+
     for col in [
-        "Κάλυψη Κατηγορίας %",
         "Βαθμός Πρώτου",
         "Βάση Τελευταίου",
     ]:
-        category_table[col] = category_table[col].round(2)
+        category_table[col] = (
+            category_table[col]
+            .fillna(0)
+            .round(0)
+            .astype(int)
+        )
 
     return category_table
 
@@ -187,28 +195,53 @@ def highlight_gel_day_row(row):
 def style_category_table(df):
     """
     Styling αναλυτικού πίνακα ανά κατηγορία.
+
+    Η στήλη Κάλυψη Κατηγορίας % εμφανίζεται πάντα με 2 δεκαδικά
+    και με το σύμβολο %, ακόμη και όταν το Streamlit χρησιμοποιεί Styler.
     """
+
+    style_obj = df.style
+
+    format_dict = {}
+
+    if "Κάλυψη Κατηγορίας %" in df.columns:
+        format_dict["Κάλυψη Κατηγορίας %"] = "{:.2f}%"
+
+    if format_dict:
+        style_obj = style_obj.format(format_dict)
 
     try:
-        return (
-            df.style
-            .apply(highlight_gel_day_row, axis=1)
-            .map(highlight_empty_positions, subset=["Κενές Θέσεις"])
+        style_obj = style_obj.apply(
+            highlight_gel_day_row,
+            axis=1
         )
+
+        if "Κενές Θέσεις" in df.columns:
+            style_obj = style_obj.map(
+                highlight_empty_positions,
+                subset=["Κενές Θέσεις"]
+            )
+
+        return style_obj
+
     except AttributeError:
-        return (
-            df.style
-            .apply(highlight_gel_day_row, axis=1)
-            .applymap(highlight_empty_positions, subset=["Κενές Θέσεις"])
+        style_obj = df.style
+
+        if format_dict:
+            style_obj = style_obj.format(format_dict)
+
+        style_obj = style_obj.apply(
+            highlight_gel_day_row,
+            axis=1
         )
 
+        if "Κενές Θέσεις" in df.columns:
+            style_obj = style_obj.applymap(
+                highlight_empty_positions,
+                subset=["Κενές Θέσεις"]
+            )
 
-def style_score_table(df):
-    """
-    Styling πίνακα βάσεων.
-    """
-
-    return df.style.apply(highlight_gel_day_row, axis=1)
+        return style_obj
 
 
 try:
@@ -217,10 +250,6 @@ try:
     if df.empty:
         st.warning("Δεν υπάρχουν ακόμη δεδομένα εισακτέων στη βάση.")
         st.stop()
-
-    # ---------------------------------------------------------
-    # Φίλτρα
-    # ---------------------------------------------------------
 
     years = sorted(df["year"].dropna().unique().tolist())
 
@@ -253,7 +282,7 @@ try:
 
     with col_department:
         selected_department = st.selectbox(
-            "Τμήμα",
+            "Προπτυχιακό Πρόγραμμα Σπουδών",
             department_options
         )
 
@@ -262,12 +291,8 @@ try:
     ].copy()
 
     if df_department.empty:
-        st.warning("Δεν υπάρχουν δεδομένα για το επιλεγμένο Τμήμα.")
+        st.warning("Δεν υπάρχουν δεδομένα για το επιλεγμένο πρόγραμμα.")
         st.stop()
-
-    # ---------------------------------------------------------
-    # Βασικά στοιχεία Τμήματος
-    # ---------------------------------------------------------
 
     department_info = df_department.iloc[0]
 
@@ -294,13 +319,9 @@ try:
         st.metric("Πόλη", city)
 
     if website and str(website).lower() not in ["nan", "none"]:
-        st.markdown(f"🌐 Ιστοσελίδα Τμήματος: {website}")
+        st.markdown(f"🌐 Ιστοσελίδα: {website}")
 
     st.divider()
-
-    # ---------------------------------------------------------
-    # Βασικοί δείκτες Τμήματος
-    # ---------------------------------------------------------
 
     total_positions = safe_int(df_department["initial_positions"].sum())
     total_admitted = safe_int(df_department["admitted"].sum())
@@ -351,7 +372,7 @@ try:
         gel_day_first_score = None
         gel_day_base_score = None
 
-    st.subheader("Βασικοί δείκτες Τμήματος")
+    st.subheader("Βασικοί δείκτες Προγράμματος")
 
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
 
@@ -376,7 +397,7 @@ try:
     with kpi_col4:
         st.metric(
             "Συνολική Κάλυψη",
-            f"{total_coverage:.1f}%"
+            f"{total_coverage:.2f}%"
         )
 
     kpi_col5, kpi_col6, kpi_col7, kpi_col8 = st.columns(4)
@@ -397,7 +418,7 @@ try:
         if gel_day_coverage is not None:
             st.metric(
                 "Κάλυψη ΓΕΛ Ημερήσια",
-                f"{gel_day_coverage:.1f}%"
+                f"{gel_day_coverage:.2f}%"
             )
         else:
             st.metric(
@@ -439,15 +460,11 @@ try:
 
     st.caption(
         "Η συνολική κάλυψη υπολογίζεται για όλες τις κατηγορίες εισαγωγής. "
-        "Η Βάση και ο Πρώτος Τμήματος προέρχονται από τη ΓΕΛ Ημερήσια. "
+        "Η Βάση και ο Πρώτος προέρχονται από τη ΓΕΛ Ημερήσια. "
         "Οι ΓΕΛ Ημερήσιες Θέσεις λαμβάνουν υπόψη τυχόν μεταφορές θέσεων προς τη ΓΕΛ Ημερήσια."
     )
 
     st.divider()
-
-    # ---------------------------------------------------------
-    # Πίνακας ανά κατηγορία
-    # ---------------------------------------------------------
 
     st.subheader("Αναλυτικός πίνακας ανά κατηγορία εισαγωγής")
 
@@ -460,15 +477,12 @@ try:
     )
 
     st.caption(
-        "Η ΓΕΛ Ημερήσια επισημαίνεται με κίτρινο. "
-        "Στη στήλη Θέσεις, για τη ΓΕΛ Ημερήσια λαμβάνονται υπόψη οι θέσεις μετά τις τυχόν μεταφορές."
+        "Στη στήλη «Θέσεις», για τη ΓΕΛ Ημερήσια εμφανίζονται οι θέσεις μετά τις τυχόν μεταφορές, "
+        "ενώ για τις υπόλοιπες κατηγορίες εμφανίζονται οι αρχικές θέσεις. "
+        "Οι Συνολικές Θέσεις του προγράμματος υπολογίζονται πάντα από τις αρχικές θέσεις όλων των κατηγοριών."
     )
 
     st.divider()
-
-    # ---------------------------------------------------------
-    # Γραφήματα ανά κατηγορία
-    # ---------------------------------------------------------
 
     st.subheader("Γραφήματα ανά κατηγορία")
 
@@ -514,14 +528,14 @@ try:
         )
 
         fig_coverage.update_traces(
-            texttemplate="%{text:.1f}%",
+            texttemplate="%{text:.2f}%",
             textposition="outside"
         )
 
         fig_coverage.update_layout(
             xaxis_title="Κατηγορία",
             yaxis_title="Κάλυψη %",
-            yaxis_range=[0, 120],
+            yaxis_range=[0, 100],
             legend_title=""
         )
 
@@ -558,6 +572,7 @@ try:
         fig_empty.update_layout(
             xaxis_title="Κατηγορία",
             yaxis_title="Κενές Θέσεις",
+            yaxis=dict(dtick=1),
             legend_title=""
         )
 
@@ -593,6 +608,7 @@ try:
         fig_base_score.update_layout(
             xaxis_title="Κατηγορία",
             yaxis_title="Βάση Τελευταίου",
+            yaxis_range=[0, 20000],
             legend_title=""
         )
 
@@ -601,29 +617,6 @@ try:
             use_container_width=True
         )
 
-    st.divider()
-
-    # ---------------------------------------------------------
-    # Πίνακας βάσεων
-    # ---------------------------------------------------------
-
-    st.subheader("Βάσεις εισαγωγής ανά κατηγορία")
-
-    score_table = category_table[
-        [
-            "Κατηγορία",
-            "Είδος Θέσης",
-            "Βαθμός Πρώτου",
-            "Βάση Τελευταίου",
-        ]
-    ].copy()
-
-    st.dataframe(
-        style_score_table(score_table),
-        use_container_width=True,
-        hide_index=True
-    )
-
 except Exception as e:
-    st.error("Υπήρξε πρόβλημα κατά την ανάλυση Τμήματος.")
+    st.error("Υπήρξε πρόβλημα κατά την ανάλυση προγράμματος.")
     st.exception(e)
