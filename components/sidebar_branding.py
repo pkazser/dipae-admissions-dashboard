@@ -7,34 +7,43 @@ ASSETS_DIR = BASE_DIR / "assets"
 
 
 def show_sidebar_branding():
-    """
-    Εμφανίζει τα λογότυπα ΔΙ.ΠΑ.Ε. και ΜΟ.ΔΙ.Π. στο sidebar.
-    Απλή και αξιόπιστη έκδοση χωρίς HTML.
-    """
-
     dipae_logo_path = ASSETS_DIR / "dipae_logo.png"
     modip_logo_path = ASSETS_DIR / "modip_logo.png"
 
     with st.sidebar:
         st.markdown("---")
-        st.caption("")
+        st.caption("🔎 Έλεγχος λογοτύπων")
+
+        st.write("BASE_DIR")
+        st.code(str(BASE_DIR))
+
+        st.write("ASSETS_DIR")
+        st.code(str(ASSETS_DIR))
+
+        st.write("Περιεχόμενα BASE_DIR")
+        try:
+            st.code("\n".join([p.name for p in BASE_DIR.iterdir()]))
+        except Exception as e:
+            st.code(str(e))
+
+        st.write("Περιεχόμενα assets")
+        try:
+            st.code("\n".join([p.name for p in ASSETS_DIR.iterdir()]))
+        except Exception as e:
+            st.code(str(e))
+
+        st.write("DIPAE exists")
+        st.code(str(dipae_logo_path.exists()))
+
+        st.write("MODIP exists")
+        st.code(str(modip_logo_path.exists()))
 
         if dipae_logo_path.exists():
-            st.image(
-                str(dipae_logo_path),
-                width=170
-            )
+            st.image(str(dipae_logo_path), width=170)
         else:
-            st.warning("Δεν βρέθηκε το λογότυπο ΔΙ.ΠΑ.Ε.")
-            st.code(str(dipae_logo_path))
-
-        st.markdown("")
+            st.error("Δεν βρέθηκε το dipae_logo.png")
 
         if modip_logo_path.exists():
-            st.image(
-                str(modip_logo_path),
-                width=220
-            )
+            st.image(str(modip_logo_path), width=220)
         else:
-            st.warning("Δεν βρέθηκε το λογότυπο ΜΟ.ΔΙ.Π.")
-            st.code(str(modip_logo_path))
+            st.error("Δεν βρέθηκε το modip_logo.png")
