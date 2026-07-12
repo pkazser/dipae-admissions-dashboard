@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
@@ -21,20 +19,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# Δεν εμφανίζουμε πλέον λογότυπα στο sidebar.
-# Η συνάρτηση παραμένει για συμβατότητα με τις υπόλοιπες σελίδες.
+# Λογότυπα ΔΙ.ΠΑ.Ε. και ΜΟ.ΔΙ.Π. διακριτικά κάτω στο sidebar.
+# Η εμφάνιση γίνεται από το components/sidebar_branding.py
 show_sidebar_branding()
-
-
-# ---------------------------------------------------------
-# Paths
-# ---------------------------------------------------------
-
-BASE_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = BASE_DIR / "assets"
-
-DIPAE_LOGO_PATH = ASSETS_DIR / "dipae_logo.png"
-MODIP_LOGO_PATH = ASSETS_DIR / "modip_logo.png"
 
 
 # ---------------------------------------------------------
@@ -56,53 +43,6 @@ def safe_int(value, default=0):
         return int(value)
     except Exception:
         return default
-
-
-def safe_float(value, default=0.0):
-    """
-    Ασφαλής μετατροπή σε δεκαδικό.
-    """
-
-    try:
-        if value is None:
-            return default
-
-        if pd.isna(value):
-            return default
-
-        return float(value)
-    except Exception:
-        return default
-
-
-def show_home_logos():
-    """
-    Εμφανίζει τα λογότυπα ΔΙ.ΠΑ.Ε. και ΜΟ.ΔΙ.Π. στην αρχική σελίδα.
-    """
-
-    if not DIPAE_LOGO_PATH.exists() and not MODIP_LOGO_PATH.exists():
-        return
-
-    st.markdown("---")
-    st.markdown("### Φορείς")
-
-    logo_col1, logo_col2, logo_col3 = st.columns([1, 1.2, 2.8])
-
-    with logo_col1:
-        if DIPAE_LOGO_PATH.exists():
-            st.image(
-                str(DIPAE_LOGO_PATH),
-                width=180
-            )
-
-    with logo_col2:
-        if MODIP_LOGO_PATH.exists():
-            st.image(
-                str(MODIP_LOGO_PATH),
-                width=230
-            )
-
-    st.markdown("---")
 
 
 def build_latest_year_summary(df):
@@ -214,7 +154,7 @@ st.markdown("""
 πρόγραμμα σπουδών, σχολή και πόλη.
 """)
 
-show_home_logos()
+st.divider()
 
 st.markdown("""
 ### Τι περιλαμβάνει η εφαρμογή
