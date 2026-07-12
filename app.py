@@ -1,25 +1,198 @@
-from components.sidebar_branding import show_sidebar_branding
+from pathlib import Path
+
+import pandas as pd
 import streamlit as st
+
 from modules.database_manager import (
     initialize_database,
     load_departments,
     load_admissions_with_departments,
 )
+from components.sidebar_branding import show_sidebar_branding
 
+
+# ---------------------------------------------------------
+# Ρυθμίσεις σελίδας
+# ---------------------------------------------------------
 
 st.set_page_config(
-    page_title="Εισακτέοι ΔΙ.ΠΑ.Ε.",
+    page_title="Πλατφόρμα Ανάλυσης Εισακτέων ΔΙ.ΠΑ.Ε.",
     page_icon="🎓",
     layout="wide"
 )
 
+# Δεν εμφανίζουμε πλέον λογότυπα στο sidebar.
+# Η συνάρτηση παραμένει για συμβατότητα με τις υπόλοιπες σελίδες.
 show_sidebar_branding()
+
+
+# ---------------------------------------------------------
+# Paths
+# ---------------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = BASE_DIR / "assets"
+
+DIPAE_LOGO_PATH = ASSETS_DIR / "dipae_logo.png"
+MODIP_LOGO_PATH = ASSETS_DIR / "modip_logo.png"
+
+
+# ---------------------------------------------------------
+# Βοηθητικές συναρτήσεις
+# ---------------------------------------------------------
+
+def safe_int(value, default=0):
+    """
+    Ασφαλής μετατροπή σε ακέραιο.
+    """
+
+    try:
+        if value is None:
+            return default
+
+        if pd.isna(value):
+            return default
+
+        return int(value)
+    except Exception:
+        return default
+
+
+def safe_float(value, default=0.0):
+    """
+    Ασφαλής μετατροπή σε δεκαδικό.
+    """
+
+    try:
+        if value is None:
+            return default
+
+        if pd.isna(value):
+            return default
+
+        return float(value)
+    except Exception:
+        return default
+
+
+def show_home_logos():
+    """
+    Εμφανίζει τα λογότυπα ΔΙ.ΠΑ.Ε. και ΜΟ.ΔΙ.Π. στην αρχική σελίδα.
+    """
+
+    if not DIPAE_LOGO_PATH.exists() and not MODIP_LOGO_PATH.exists():
+        return
+
+    st.markdown("---")
+    st.markdown("### Φορείς")
+
+    logo_col1, logo_col2, logo_col3 = st.columns([1, 1.2, 2.8])
+
+    with logo_col1:
+        if DIPAE_LOGO_PATH.exists():
+            st.image(
+                str(DIPAE_LOGO_PATH),
+                width=180
+            )
+
+    with logo_col2:
+        if MODIP_LOGO_PATH.exists():
+            st.image(
+                str(MODIP_LOGO_PATH),
+                width=230
+            )
+
+    st.markdown("---")
+
+
+def build_latest_year_summary(df):
+    """
+    Υπολογίζει βασικούς δείκτες για το πιο πρόσφατο διαθέσιμο έτος.
+
+    Μεθοδολογία:
+    - Η ανάλυση γίνεται για όλες τις κατηγορίες.
+    - Οι Συνολικές Θέσεις είναι οι Αρχικές Θέσεις.
+    - Η Συνολική Κάλυψη είναι Επιτυχόντες / Συνολικές Θέσεις.
+    """
+
+    if df.empty:
+        return None
+
+    years = sorted(df["year"].dropna().unique().tolist())
+
+    if not years:
+        return None
+
+    latest_year = years[-1]
+
+    df_latest = df[df["year"] == latest_year].copy()
+
+    if df_latest.empty:
+        return None
+
+    department_summary = (
+        df_latest
+        .groupby(
+            [
+                "department_code",
+                "department_name_clean",
+                "school",
+                "city",
+            ],
+            as_index=False
+        )
+        .agg(
+            total_positions=("initial_positions", "sum"),
+            total_admitted=("admitted", "sum"),
+        )
+    )
+
+    department_summary["empty_positions"] = (
+        department_summary["total_positions"]
+        - department_summary["total_admitted"]
+    )
+
+    total_programs = safe_int(department_summary["department_code"].nunique())
+    total_schools = safe_int(department_summary["school"].nunique())
+    total_cities = safe_int(department_summary["city"].nunique())
+
+    total_positions = safe_int(department_summary["total_positions"].sum())
+    total_admitted = safe_int(department_summary["total_admitted"].sum())
+    total_empty = safe_int(department_summary["empty_positions"].sum())
+
+    total_coverage = (
+        total_admitted / total_positions * 100
+        if total_positions > 0
+        else 0
+    )
+
+    available_categories = sorted(
+        df_latest["exam_category"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+    return {
+        "latest_year": latest_year,
+        "total_programs": total_programs,
+        "total_schools": total_schools,
+        "total_cities": total_cities,
+        "total_positions": total_positions,
+        "total_admitted": total_admitted,
+        "total_empty": total_empty,
+        "total_coverage": total_coverage,
+        "available_categories": available_categories,
+    }
+
+
 # ---------------------------------------------------------
 # Αρχικοποίηση βάσης
 # ---------------------------------------------------------
 
 try:
     initialize_database()
+    load_departments()
 except Exception as e:
     st.error("Υπήρξε πρόβλημα κατά την αρχικοποίηση της βάσης δεδομένων.")
     st.exception(e)
@@ -27,27 +200,45 @@ except Exception as e:
 
 
 # ---------------------------------------------------------
-# Τίτλος
+# Κύρια οθόνη
 # ---------------------------------------------------------
 
 st.title("🎓 Πλατφόρμα Ανάλυσης Εισακτέων ΔΙ.ΠΑ.Ε.")
 
-st.markdown(
-    """
-Η εφαρμογή παρουσιάζει και αναλύει τα δεδομένα εισακτέων των **ενεργών προπτυχιακών
-προγραμμάτων σπουδών του Διεθνούς Πανεπιστημίου της Ελλάδος (ΔΙ.ΠΑ.Ε.)**.
+st.markdown("""
+Η εφαρμογή συγκεντρώνει, επεξεργάζεται και παρουσιάζει τα δεδομένα εισακτέων
+των ενεργών προπτυχιακών προγραμμάτων σπουδών του Διεθνούς Πανεπιστημίου της Ελλάδος.
 
-Στόχος είναι να παρέχει γρήγορη και κατανοητή εικόνα για:
+Στόχος της πλατφόρμας είναι να υποστηρίξει τη διοικητική παρακολούθηση,
+τη διαχρονική σύγκριση και την τεκμηριωμένη ανάλυση των εισακτέων ανά έτος,
+πρόγραμμα σπουδών, σχολή και πόλη.
+""")
 
-- τις συνολικές θέσεις,
-- τους επιτυχόντες,
-- τις κενές θέσεις,
-- το ποσοστό κάλυψης,
-- τις βάσεις εισαγωγής ΓΕΛ Ημερήσια,
-- τις συγκρίσεις μεταξύ ετών,
-- και τη συνολική εικόνα ανά πρόγραμμα, Σχολή και Πόλη.
-"""
-)
+show_home_logos()
+
+st.markdown("""
+### Τι περιλαμβάνει η εφαρμογή
+
+Η πλατφόρμα παρέχει:
+
+- συνολική εικόνα εισακτέων ανά έτος,
+- ανάλυση ανά ενεργό προπτυχιακό πρόγραμμα σπουδών,
+- συγκεντρωτική ανάλυση ανά σχολή και πόλη,
+- κατατάξεις προγραμμάτων με βάση θέσεις, επιτυχόντες, κάλυψη και βάση εισαγωγής,
+- dashboard διοίκησης με βασικούς δείκτες,
+- σύγκριση μεταξύ ετών,
+- εξαγωγή διοικητικής αναφοράς σε Word.
+
+### Βασικοί μεθοδολογικοί κανόνες
+
+- Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
+- Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
+- Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
+- Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
+- Ο **Πρώτος Προγράμματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
+- Δεν χρησιμοποιούνται μέσοι όροι βάσεων.
+- Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων ως βασικοί δείκτες.
+""")
 
 st.divider()
 
@@ -57,195 +248,164 @@ st.divider()
 # ---------------------------------------------------------
 
 try:
-    departments_df = load_departments()
-    admissions_df = load_admissions_with_departments()
+    df = load_admissions_with_departments()
 except Exception as e:
-    st.error("Υπήρξε πρόβλημα κατά τη φόρτωση των δεδομένων.")
+    st.error("Υπήρξε πρόβλημα κατά τη φόρτωση των δεδομένων εισακτέων.")
     st.exception(e)
     st.stop()
 
 
-# ---------------------------------------------------------
-# Βασικοί δείκτες αρχικής σελίδας
-# ---------------------------------------------------------
-
-active_programs = 0
-total_schools = 0
-total_cities = 0
-
-if departments_df is not None and not departments_df.empty:
-    active_programs = int(departments_df["department_code"].nunique())
-
-    if "school" in departments_df.columns:
-        total_schools = int(departments_df["school"].dropna().nunique())
-
-    if "city" in departments_df.columns:
-        total_cities = int(departments_df["city"].dropna().nunique())
-
-available_years = []
-
-if admissions_df is not None and not admissions_df.empty:
-    available_years = sorted(
-        admissions_df["year"].dropna().unique().tolist()
+if df.empty:
+    st.warning(
+        "Δεν υπάρχουν ακόμη δεδομένα εισακτέων στη βάση. "
+        "Εισάγετε πρώτα δεδομένα τοπικά και ανεβάστε τη βάση δεδομένων στο GitHub."
     )
-
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-
-with kpi1:
-    st.metric(
-        "Ενεργά Προπτυχιακά Προγράμματα",
-        active_programs
-    )
-
-with kpi2:
-    st.metric(
-        "Σχολές",
-        total_schools
-    )
-
-with kpi3:
-    st.metric(
-        "Πόλεις",
-        total_cities
-    )
-
-with kpi4:
-    if available_years:
-        st.metric(
-            "Έτη Δεδομένων",
-            f"{min(available_years)}–{max(available_years)}"
-        )
-    else:
-        st.metric(
-            "Έτη Δεδομένων",
-            "—"
-        )
+    st.stop()
 
 
-# ---------------------------------------------------------
-# Μεθοδολογία
-# ---------------------------------------------------------
+summary = build_latest_year_summary(df)
 
-st.divider()
-
-st.subheader("📌 Μεθοδολογικοί κανόνες")
-
-st.markdown(
-    """
-Η εφαρμογή ακολουθεί ενιαία λογική σε όλες τις σελίδες:
-
-1. Η ανάλυση γίνεται πάντα για όλες τις κατηγορίες εισαγωγής.
-
-2. Οι Συνολικές Θέσεις υπολογίζονται από τις Αρχικές Θέσεις.
-
-3. Η Συνολική Κάλυψη υπολογίζεται ως Επιτυχόντες / Συνολικές Θέσεις.
-
-4. Η Βάση Προγράμματος είναι η Βάση ΓΕΛ Ημερήσια.
-
-5. Ο Πρώτος Προγράμματος είναι ο Πρώτος ΓΕΛ Ημερήσια.
-
-6. Δεν εμφανίζεται άθροισμα τελικών θέσεων.
-
-7. Δεν εμφανίζεται φαινόμενη μεταβολή θέσεων.
-
-8. Δεν χρησιμοποιούνται μέσοι όροι βάσεων σε επίπεδο Σχολής ή Πόλης.
-"""
-)
-
-
-# ---------------------------------------------------------
-# Σελίδες εφαρμογής
-# ---------------------------------------------------------
-
-st.divider()
-
-st.subheader("🧭 Διαθέσιμες ενότητες")
-
-st.markdown(
-    """
-Από το αριστερό μενού μπορείς να χρησιμοποιήσεις τις βασικές ενότητες της εφαρμογής:
-
-### 📋 Δεδομένα Εισακτέων
-Προβολή συνολικών δεδομένων ανά έτος, με πίνακες και γραφήματα για όλα τα ενεργά
-προπτυχιακά προγράμματα.
-
-### 🏛️ Ανάλυση Προγράμματος
-Αναλυτική εικόνα για ένα συγκεκριμένο προπτυχιακό πρόγραμμα: θέσεις, επιτυχόντες,
-κάλυψη, βάση ΓΕΛ Ημερήσια και στοιχεία ανά κατηγορία εισαγωγής.
-
-### 🏫 Ανάλυση Σχολών και Πόλεων
-Συγκεντρωτική εικόνα ανά Σχολή ή ανά Πόλη, χωρίς μέσους όρους βάσεων.
-
-### 🏆 Top Rankings
-Κατατάξεις προγραμμάτων με βάση τη Βάση ΓΕΛ Ημερήσια, τους επιτυχόντες,
-την κάλυψη, τις κενές θέσεις και τις συνολικές θέσεις.
-
-### 📊 Dashboard Διοίκησης
-Στοχευμένη διοικητική εικόνα για το σύνολο του Ιδρύματος, με βασικούς δείκτες
-και Top-5 επισημάνσεις.
-
-### 📈 Σύγκριση Ετών
-Σύγκριση δύο ετών ως προς θέσεις, επιτυχόντες, κάλυψη, κενές θέσεις και βάσεις
-ΓΕΛ Ημερήσια.
-"""
-)
+if summary is None:
+    st.warning("Δεν ήταν δυνατός ο υπολογισμός της συνολικής εικόνας.")
+    st.stop()
 
 
 # ---------------------------------------------------------
 # Διαθέσιμα δεδομένα
 # ---------------------------------------------------------
 
-st.divider()
+st.subheader("📌 Διαθέσιμα δεδομένα")
 
-st.subheader("📂 Διαθέσιμα δεδομένα")
+years = sorted(df["year"].dropna().unique().tolist())
 
-if admissions_df is None or admissions_df.empty:
-    st.warning(
-        "Δεν υπάρχουν ακόμη δεδομένα εισακτέων στη βάση. "
-        "Για την online έκδοση πρέπει να έχει ανέβει ενημερωμένο αρχείο database/admissions.db."
-    )
-else:
-    latest_year = max(available_years)
+year_text = ", ".join([str(year) for year in years])
 
-    latest_df = admissions_df[
-        admissions_df["year"] == latest_year
-    ].copy()
+st.markdown(
+    f"""
+Η βάση δεδομένων περιλαμβάνει στοιχεία για τα έτη:
 
-    total_positions_latest = int(latest_df["initial_positions"].sum())
-    total_admitted_latest = int(latest_df["admitted"].sum())
-    total_empty_latest = total_positions_latest - total_admitted_latest
+**{year_text}**
+"""
+)
 
-    total_coverage_latest = (
-        total_admitted_latest / total_positions_latest * 100
-        if total_positions_latest > 0
-        else 0
-    )
+latest_year = summary["latest_year"]
 
-    st.markdown(
-        f"""
+st.markdown(
+    f"""
 Για το πιο πρόσφατο διαθέσιμο έτος **{latest_year}**:
 
-- **Συνολικές Θέσεις:** {total_positions_latest}
-- **Επιτυχόντες:** {total_admitted_latest}
-- **Κενές Θέσεις:** {total_empty_latest}
-- **Συνολική Κάλυψη:** {total_coverage_latest:.1f}%
+- **Ενεργά Προπτυχιακά Προγράμματα Σπουδών:** {summary["total_programs"]}
+- **Σχολές:** {summary["total_schools"]}
+- **Πόλεις:** {summary["total_cities"]}
+- **Συνολικές Θέσεις:** {summary["total_positions"]}
+- **Επιτυχόντες:** {summary["total_admitted"]}
+- **Κενές Θέσεις:** {summary["total_empty"]}
+- **Συνολική Κάλυψη:** {summary["total_coverage"]:.2f}%
 """
-    )
-
-    st.caption(
-        "Οι τιμές αυτές υπολογίζονται για όλες τις κατηγορίες εισαγωγής και "
-        "οι Συνολικές Θέσεις βασίζονται στις Αρχικές Θέσεις."
-    )
-
-
-# ---------------------------------------------------------
-# Τελική σημείωση
-# ---------------------------------------------------------
+)
 
 st.divider()
 
+
+# ---------------------------------------------------------
+# Βασικοί δείκτες
+# ---------------------------------------------------------
+
+st.subheader(f"📊 Συνολική εικόνα {latest_year}")
+
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+with kpi1:
+    st.metric(
+        "Ενεργά Προπτυχιακά Προγράμματα",
+        summary["total_programs"]
+    )
+
+with kpi2:
+    st.metric(
+        "Συνολικές Θέσεις",
+        summary["total_positions"]
+    )
+
+with kpi3:
+    st.metric(
+        "Επιτυχόντες",
+        summary["total_admitted"]
+    )
+
+with kpi4:
+    st.metric(
+        "Συνολική Κάλυψη",
+        f'{summary["total_coverage"]:.2f}%'
+    )
+
+kpi5, kpi6, kpi7 = st.columns(3)
+
+with kpi5:
+    st.metric(
+        "Κενές Θέσεις",
+        summary["total_empty"]
+    )
+
+with kpi6:
+    st.metric(
+        "Σχολές",
+        summary["total_schools"]
+    )
+
+with kpi7:
+    st.metric(
+        "Πόλεις",
+        summary["total_cities"]
+    )
+
+st.caption(
+    "Οι δείκτες αφορούν όλες τις κατηγορίες εισαγωγής του πιο πρόσφατου διαθέσιμου έτους."
+)
+
+st.divider()
+
+
+# ---------------------------------------------------------
+# Κατηγορίες εισαγωγής
+# ---------------------------------------------------------
+
+st.subheader("🧾 Κατηγορίες εισαγωγής")
+
+if summary["available_categories"]:
+    categories_text = "\n".join(
+        [
+            f"- {category}"
+            for category in summary["available_categories"]
+        ]
+    )
+
+    st.markdown(categories_text)
+else:
+    st.info("Δεν εντοπίστηκαν κατηγορίες εισαγωγής για το πιο πρόσφατο έτος.")
+
+st.divider()
+
+
+# ---------------------------------------------------------
+# Οδηγός πλοήγησης
+# ---------------------------------------------------------
+
+st.subheader("🧭 Οδηγός πλοήγησης")
+
+st.markdown("""
+Χρησιμοποίησε το μενού στα αριστερά για να μεταβείς στις επιμέρους ενότητες:
+
+- **Admissions Data**: συνοπτικοί και αναλυτικοί πίνακες εισακτέων.
+- **Department Analysis**: αναλυτική εικόνα ανά προπτυχιακό πρόγραμμα σπουδών.
+- **School City Analysis**: συγκεντρωτική εικόνα ανά σχολή ή πόλη.
+- **Top Rankings**: κατατάξεις προγραμμάτων με βάση θέσεις, επιτυχόντες, κάλυψη και βάση.
+- **Management Dashboard**: συνοπτική διοικητική εικόνα για τη διοίκηση.
+- **Year Comparison**: σύγκριση δύο ετών.
+- **Management Report**: παραγωγή διοικητικής αναφοράς σε Word.
+""")
+
 st.info(
-    "Η online έκδοση λειτουργεί ως dashboard προβολής και ανάλυσης. "
-    "Η εισαγωγή νέων αρχείων Υπουργείου γίνεται τοπικά και στη συνέχεια ενημερώνεται "
-    "το online περιβάλλον με νέο database/admissions.db."
+    "Η online έκδοση λειτουργεί ως εφαρμογή προβολής και ανάλυσης. "
+    "Η εισαγωγή νέων αρχείων γίνεται τοπικά και στη συνέχεια ενημερώνεται η βάση δεδομένων."
 )
