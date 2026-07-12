@@ -7,14 +7,14 @@ from docx import Document
 from docx.shared import Pt
 
 from modules.database_manager import load_admissions_with_departments
-
+from components.sidebar_branding import show_sidebar_branding
 
 st.set_page_config(
     page_title="Έκθεση Διοίκησης | ΔΙΠΑΕ",
     page_icon="📄",
     layout="wide"
 )
-
+show_sidebar_branding()
 
 st.title("📄 Έκθεση Αναφοράς προς Διοίκηση")
 

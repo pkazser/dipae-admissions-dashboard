@@ -1,14 +1,14 @@
 import streamlit as st
 import plotly.express as px
 from modules.database_manager import load_admissions_with_departments
-
+from components.sidebar_branding import show_sidebar_branding
 
 st.set_page_config(
     page_title="Ανάλυση Σχολών & Πόλεων | ΔΙΠΑΕ",
     page_icon="🏫",
     layout="wide"
 )
-
+show_sidebar_branding()
 
 st.title("🏫 Ανάλυση Σχολών και Πόλεων ΔΙ.ΠΑ.Ε.")
 
