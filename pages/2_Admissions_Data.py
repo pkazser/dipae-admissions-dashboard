@@ -151,12 +151,15 @@ def format_summary_table(df):
             "city": "Πόλη",
             "total_positions": "Συνολικές Θέσεις",
             "total_admitted": "Επιτυχόντες",
-            "coverage": "Κάλυψη %",
+            "coverage": "Συνολική Κάλυψη %",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+    display["Συνολική Κάλυψη %"] = (
+        display["Συνολική Κάλυψη %"]
+        .round(2)
+    )
 
     display["Βάση ΓΕΛ Ημ."] = (
         display["Βάση ΓΕΛ Ημ."]
@@ -196,13 +199,16 @@ def format_detailed_summary_table(df):
             "total_positions": "Συνολικές Θέσεις",
             "total_admitted": "Επιτυχόντες",
             "empty_positions": "Κενές Θέσεις",
-            "coverage": "Κάλυψη %",
+            "coverage": "Συνολική Κάλυψη %",
             "gel_day_first_score": "Πρώτος ΓΕΛ Ημ.",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+    display["Συνολική Κάλυψη %"] = (
+        display["Συνολική Κάλυψη %"]
+        .round(2)
+    )
 
     for col in [
         "Πρώτος ΓΕΛ Ημ.",
@@ -332,15 +338,16 @@ def style_summary_table(df):
     """
     Styling σύνοψης προγραμμάτων.
 
-    Τα ποσοστά κάλυψης εμφανίζονται πάντα με 2 δεκαδικά και σύμβολο %.
+    Όλες οι στήλες κάλυψης εμφανίζονται πάντα με 2 δεκαδικά και σύμβολο %.
     """
 
     style_obj = df.style
 
     format_dict = {}
 
-    if "Κάλυψη %" in df.columns:
-        format_dict["Κάλυψη %"] = "{:.2f}%"
+    for col in df.columns:
+        if "Κάλυψη" in col and "%" in col:
+            format_dict[col] = "{:.2f}%"
 
     if format_dict:
         style_obj = style_obj.format(format_dict)
@@ -357,16 +364,21 @@ def style_summary_table(df):
                 subset=["Κενές Θέσεις"]
             )
 
-    if "Κάλυψη %" in df.columns:
+    coverage_columns = [
+        col for col in df.columns
+        if "Κάλυψη" in col and "%" in col
+    ]
+
+    if coverage_columns:
         try:
             style_obj = style_obj.map(
                 highlight_coverage,
-                subset=["Κάλυψη %"]
+                subset=coverage_columns
             )
         except AttributeError:
             style_obj = style_obj.applymap(
                 highlight_coverage,
-                subset=["Κάλυψη %"]
+                subset=coverage_columns
             )
 
     return style_obj
@@ -390,19 +402,24 @@ def style_raw_table(df):
 def apply_large_chart_layout(fig, title, xaxis_title, yaxis_title):
     """
     Κοινή μορφοποίηση για μεγάλα οριζόντια γραφήματα.
+    Δίνει περισσότερο χώρο δεξιά ώστε να μη κόβονται οι αριθμητικές τιμές.
     """
 
     fig.update_layout(
         title=title,
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title,
-        height=760,
-        margin=dict(l=20, r=150, t=80, b=40),
-        uniformtext_minsize=8,
-        uniformtext_mode="hide"
+        height=800,
+        margin=dict(l=20, r=220, t=80, b=40),
+        uniformtext_minsize=7,
+        uniformtext_mode="show"
     )
 
     fig.update_yaxes(
+        automargin=True
+    )
+
+    fig.update_xaxes(
         automargin=True
     )
 
@@ -412,29 +429,63 @@ def apply_large_chart_layout(fig, title, xaxis_title, yaxis_title):
 def create_positions_chart(summary_display):
     """
     Οριζόντιο γράφημα συνολικών θέσεων και επιτυχόντων ανά πρόγραμμα.
+
+    Χρησιμοποιούμε long μορφή δεδομένων για καλύτερο έλεγχο των labels.
     """
 
-    chart_df = summary_display.sort_values(
+    chart_df = summary_display[
+        [
+            "Προπτυχιακό Πρόγραμμα",
+            "Συνολικές Θέσεις",
+            "Επιτυχόντες",
+        ]
+    ].copy()
+
+    chart_df = chart_df.sort_values(
         "Συνολικές Θέσεις",
         ascending=True
-    ).copy()
+    )
 
-    fig = px.bar(
-        chart_df,
-        x=[
+    chart_long = chart_df.melt(
+        id_vars="Προπτυχιακό Πρόγραμμα",
+        value_vars=[
             "Συνολικές Θέσεις",
             "Επιτυχόντες",
         ],
+        var_name="Δείκτης",
+        value_name="Πλήθος"
+    )
+
+    max_value = (
+        chart_long["Πλήθος"].max()
+        if not chart_long.empty
+        else 0
+    )
+
+    fig = px.bar(
+        chart_long,
+        x="Πλήθος",
         y="Προπτυχιακό Πρόγραμμα",
+        color="Δείκτης",
         orientation="h",
         barmode="group",
-        text_auto=True,
+        text="Πλήθος",
         title="Συνολικές θέσεις και επιτυχόντες ανά πρόγραμμα"
     )
 
     fig.update_traces(
+        texttemplate="%{text:.0f}",
         textposition="outside",
+        textfont_size=10,
         cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[
+            0,
+            max_value * 1.25 if max_value > 0 else 10
+        ],
+        legend_title=""
     )
 
     fig = apply_large_chart_layout(
@@ -453,33 +504,34 @@ def create_coverage_chart(summary_display):
     """
 
     chart_df = summary_display.sort_values(
-        "Κάλυψη %",
+        "Συνολική Κάλυψη %",
         ascending=True
     ).copy()
 
     fig = px.bar(
         chart_df,
-        x="Κάλυψη %",
+        x="Συνολική Κάλυψη %",
         y="Προπτυχιακό Πρόγραμμα",
         orientation="h",
-        text="Κάλυψη %",
+        text="Συνολική Κάλυψη %",
         title="Συνολική κάλυψη ανά πρόγραμμα"
     )
 
     fig.update_traces(
         texttemplate="%{text:.2f}%",
         textposition="outside",
+        textfont_size=10,
         cliponaxis=False
     )
 
     fig.update_layout(
-        xaxis_range=[0, 110]
+        xaxis_range=[0, 115]
     )
 
     fig = apply_large_chart_layout(
         fig=fig,
         title="Συνολική κάλυψη ανά πρόγραμμα",
-        xaxis_title="Κάλυψη %",
+        xaxis_title="Συνολική Κάλυψη %",
         yaxis_title=""
     )
 
@@ -502,6 +554,12 @@ def create_base_chart(summary_display):
         .copy()
     )
 
+    max_value = (
+        chart_df["Βάση ΓΕΛ Ημ."].max()
+        if not chart_df.empty
+        else 0
+    )
+
     fig = px.bar(
         chart_df,
         x="Βάση ΓΕΛ Ημ.",
@@ -514,11 +572,15 @@ def create_base_chart(summary_display):
     fig.update_traces(
         texttemplate="%{text:.0f}",
         textposition="outside",
+        textfont_size=10,
         cliponaxis=False
     )
 
     fig.update_layout(
-        xaxis_range=[0, 22000]
+        xaxis_range=[
+            0,
+            max(20000, max_value * 1.18)
+        ]
     )
 
     fig = apply_large_chart_layout(
@@ -541,6 +603,12 @@ def create_empty_chart(summary_display):
         ascending=True
     ).copy()
 
+    max_empty = (
+        chart_df["Κενές Θέσεις"].max()
+        if not chart_df.empty
+        else 0
+    )
+
     fig = px.bar(
         chart_df,
         x="Κενές Θέσεις",
@@ -551,20 +619,16 @@ def create_empty_chart(summary_display):
     )
 
     fig.update_traces(
+        texttemplate="%{text:.0f}",
         textposition="outside",
+        textfont_size=10,
         cliponaxis=False
-    )
-
-    max_empty = (
-        chart_df["Κενές Θέσεις"].max()
-        if not chart_df.empty
-        else 0
     )
 
     fig.update_layout(
         xaxis_range=[
             0,
-            max(5, max_empty + 3)
+            max(5, max_empty * 1.25)
         ],
         xaxis=dict(dtick=1)
     )
@@ -577,8 +641,6 @@ def create_empty_chart(summary_display):
     )
 
     return fig
-
-
 # ---------------------------------------------------------
 # Κύρια ροή
 # ---------------------------------------------------------
@@ -687,7 +749,7 @@ try:
     st.divider()
 
     # ---------------------------------------------------------
-    # Νέα ενότητα γραφημάτων με dropdown
+    # Ενότητα διαγραμμάτων με dropdown
     # ---------------------------------------------------------
 
     st.subheader("Βασικά διαγράμματα")
@@ -722,7 +784,7 @@ try:
     )
 
     st.caption(
-        "Τα γραφήματα εμφανίζονται ένα κάθε φορά για καλύτερη αναγνωσιμότητα. "
+        "Τα διαγράμματα εμφανίζονται ένα κάθε φορά για καλύτερη αναγνωσιμότητα. "
         "Η οριζόντια διάταξη βοηθά στην καθαρή εμφάνιση των ονομάτων των προγραμμάτων."
     )
 
@@ -740,6 +802,11 @@ try:
             "Αναλυτική σύνοψη",
             "Εγγραφές ανά κατηγορία",
         ]
+    )
+
+    coverage_note = (
+        "Η «Συνολική Κάλυψη %» υπολογίζεται επί των συνολικών θέσεων όλων "
+        "των κατηγοριών εισαγωγής και όχι μόνο επί των θέσεων της ΓΕΛ Ημερήσιας."
     )
 
     with tab_summary:
@@ -761,6 +828,8 @@ try:
             "Ο συνοπτικός πίνακας κρατά τις βασικές πληροφορίες ώστε οι βάσεις να εντοπίζονται εύκολα."
         )
 
+        st.caption(coverage_note)
+
     with tab_detailed:
         detailed_display = format_detailed_summary_table(
             department_summary.sort_values(
@@ -775,6 +844,8 @@ try:
             use_container_width=True,
             hide_index=True
         )
+
+        st.caption(coverage_note)
 
     with tab_raw:
         raw_display = format_raw_table(
