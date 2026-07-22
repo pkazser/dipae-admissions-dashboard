@@ -3,12 +3,15 @@ import plotly.express as px
 from modules.database_manager import load_admissions_with_departments
 from components.sidebar_branding import show_sidebar_branding
 
+
 st.set_page_config(
     page_title="Δεδομένα Εισακτέων | ΔΙΠΑΕ",
     page_icon="📋",
     layout="wide"
 )
+
 show_sidebar_branding()
+
 
 st.title("📋 Δεδομένα Εισακτέων ΔΙ.ΠΑ.Ε.")
 
@@ -28,6 +31,10 @@ st.markdown("""
 
 st.divider()
 
+
+# ---------------------------------------------------------
+# Βοηθητικές συναρτήσεις δεδομένων
+# ---------------------------------------------------------
 
 def get_gel_day_scores(df_year):
     """
@@ -112,6 +119,10 @@ def build_department_summary(df_year):
 
     return summary
 
+
+# ---------------------------------------------------------
+# Μορφοποίηση πινάκων
+# ---------------------------------------------------------
 
 def format_summary_table(df):
     """
@@ -263,6 +274,10 @@ def format_raw_table(df):
     return display
 
 
+# ---------------------------------------------------------
+# Styling πινάκων
+# ---------------------------------------------------------
+
 def highlight_empty_positions(val):
     """
     Χρωματισμός κενών θέσεων.
@@ -368,6 +383,206 @@ def style_raw_table(df):
     )
 
 
+# ---------------------------------------------------------
+# Γραφήματα
+# ---------------------------------------------------------
+
+def apply_large_chart_layout(fig, title, xaxis_title, yaxis_title):
+    """
+    Κοινή μορφοποίηση για μεγάλα οριζόντια γραφήματα.
+    """
+
+    fig.update_layout(
+        title=title,
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title,
+        height=760,
+        margin=dict(l=20, r=150, t=80, b=40),
+        uniformtext_minsize=8,
+        uniformtext_mode="hide"
+    )
+
+    fig.update_yaxes(
+        automargin=True
+    )
+
+    return fig
+
+
+def create_positions_chart(summary_display):
+    """
+    Οριζόντιο γράφημα συνολικών θέσεων και επιτυχόντων ανά πρόγραμμα.
+    """
+
+    chart_df = summary_display.sort_values(
+        "Συνολικές Θέσεις",
+        ascending=True
+    ).copy()
+
+    fig = px.bar(
+        chart_df,
+        x=[
+            "Συνολικές Θέσεις",
+            "Επιτυχόντες",
+        ],
+        y="Προπτυχιακό Πρόγραμμα",
+        orientation="h",
+        barmode="group",
+        text_auto=True,
+        title="Συνολικές θέσεις και επιτυχόντες ανά πρόγραμμα"
+    )
+
+    fig.update_traces(
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig = apply_large_chart_layout(
+        fig=fig,
+        title="Συνολικές θέσεις και επιτυχόντες ανά πρόγραμμα",
+        xaxis_title="Πλήθος",
+        yaxis_title=""
+    )
+
+    return fig
+
+
+def create_coverage_chart(summary_display):
+    """
+    Οριζόντιο γράφημα συνολικής κάλυψης ανά πρόγραμμα.
+    """
+
+    chart_df = summary_display.sort_values(
+        "Κάλυψη %",
+        ascending=True
+    ).copy()
+
+    fig = px.bar(
+        chart_df,
+        x="Κάλυψη %",
+        y="Προπτυχιακό Πρόγραμμα",
+        orientation="h",
+        text="Κάλυψη %",
+        title="Συνολική κάλυψη ανά πρόγραμμα"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.2f}%",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, 110]
+    )
+
+    fig = apply_large_chart_layout(
+        fig=fig,
+        title="Συνολική κάλυψη ανά πρόγραμμα",
+        xaxis_title="Κάλυψη %",
+        yaxis_title=""
+    )
+
+    return fig
+
+
+def create_base_chart(summary_display):
+    """
+    Οριζόντιο γράφημα βάσης ΓΕΛ Ημερήσια ανά πρόγραμμα.
+    """
+
+    chart_df = (
+        summary_display[
+            summary_display["Βάση ΓΕΛ Ημ."] > 0
+        ]
+        .sort_values(
+            "Βάση ΓΕΛ Ημ.",
+            ascending=True
+        )
+        .copy()
+    )
+
+    fig = px.bar(
+        chart_df,
+        x="Βάση ΓΕΛ Ημ.",
+        y="Προπτυχιακό Πρόγραμμα",
+        orientation="h",
+        text="Βάση ΓΕΛ Ημ.",
+        title="Βάση ΓΕΛ Ημερήσια ανά πρόγραμμα"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, 22000]
+    )
+
+    fig = apply_large_chart_layout(
+        fig=fig,
+        title="Βάση ΓΕΛ Ημερήσια ανά πρόγραμμα",
+        xaxis_title="Βάση ΓΕΛ Ημερήσια",
+        yaxis_title=""
+    )
+
+    return fig
+
+
+def create_empty_chart(summary_display):
+    """
+    Οριζόντιο γράφημα κενών θέσεων ανά πρόγραμμα.
+    """
+
+    chart_df = summary_display.sort_values(
+        "Κενές Θέσεις",
+        ascending=True
+    ).copy()
+
+    fig = px.bar(
+        chart_df,
+        x="Κενές Θέσεις",
+        y="Προπτυχιακό Πρόγραμμα",
+        orientation="h",
+        text="Κενές Θέσεις",
+        title="Κενές θέσεις ανά πρόγραμμα"
+    )
+
+    fig.update_traces(
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    max_empty = (
+        chart_df["Κενές Θέσεις"].max()
+        if not chart_df.empty
+        else 0
+    )
+
+    fig.update_layout(
+        xaxis_range=[
+            0,
+            max(5, max_empty + 3)
+        ],
+        xaxis=dict(dtick=1)
+    )
+
+    fig = apply_large_chart_layout(
+        fig=fig,
+        title="Κενές θέσεις ανά πρόγραμμα",
+        xaxis_title="Κενές Θέσεις",
+        yaxis_title=""
+    )
+
+    return fig
+
+
+# ---------------------------------------------------------
+# Κύρια ροή
+# ---------------------------------------------------------
+
 try:
     df = load_admissions_with_departments()
 
@@ -471,112 +686,51 @@ try:
 
     st.divider()
 
-    st.subheader("Γραφήματα ανά πρόγραμμα")
+    # ---------------------------------------------------------
+    # Νέα ενότητα γραφημάτων με dropdown
+    # ---------------------------------------------------------
+
+    st.subheader("Βασικά διαγράμματα")
 
     summary_display = format_detailed_summary_table(department_summary)
 
-    chart_col1, chart_col2 = st.columns(2)
+    chart_choice = st.selectbox(
+        "Επιλέξτε διάγραμμα",
+        [
+            "Συνολικές θέσεις και επιτυχόντες",
+            "Συνολική κάλυψη",
+            "Βάση ΓΕΛ Ημερήσια",
+            "Κενές θέσεις",
+        ]
+    )
 
-    with chart_col1:
-        fig_positions = px.bar(
-            summary_display.sort_values("Συνολικές Θέσεις", ascending=False),
-            x="Προπτυχιακό Πρόγραμμα",
-            y=["Συνολικές Θέσεις", "Επιτυχόντες"],
-            barmode="group",
-            title="Συνολικές θέσεις και επιτυχόντες ανά πρόγραμμα"
-        )
+    if chart_choice == "Συνολικές θέσεις και επιτυχόντες":
+        fig = create_positions_chart(summary_display)
 
-        fig_positions.update_layout(
-            xaxis_title="Προπτυχιακό Πρόγραμμα",
-            yaxis_title="Πλήθος",
-            legend_title=""
-        )
+    elif chart_choice == "Συνολική κάλυψη":
+        fig = create_coverage_chart(summary_display)
 
-        st.plotly_chart(
-            fig_positions,
-            use_container_width=True
-        )
+    elif chart_choice == "Βάση ΓΕΛ Ημερήσια":
+        fig = create_base_chart(summary_display)
 
-    with chart_col2:
-        fig_coverage = px.bar(
-            summary_display.sort_values("Κάλυψη %", ascending=False),
-            x="Προπτυχιακό Πρόγραμμα",
-            y="Κάλυψη %",
-            text="Κάλυψη %",
-            title="Συνολική κάλυψη ανά πρόγραμμα"
-        )
+    else:
+        fig = create_empty_chart(summary_display)
 
-        fig_coverage.update_traces(
-            texttemplate="%{text:.2f}%",
-            textposition="outside"
-        )
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
 
-        fig_coverage.update_layout(
-            xaxis_title="Προπτυχιακό Πρόγραμμα",
-            yaxis_title="Κάλυψη %",
-            yaxis_range=[0, 100]
-        )
-
-        st.plotly_chart(
-            fig_coverage,
-            use_container_width=True
-        )
-
-    chart_col3, chart_col4 = st.columns(2)
-
-    with chart_col3:
-        fig_base = px.bar(
-            summary_display.dropna(subset=["Βάση ΓΕΛ Ημ."]).sort_values(
-                "Βάση ΓΕΛ Ημ.",
-                ascending=False
-            ),
-            x="Προπτυχιακό Πρόγραμμα",
-            y="Βάση ΓΕΛ Ημ.",
-            text="Βάση ΓΕΛ Ημ.",
-            title="Βάση ΓΕΛ Ημερήσια ανά πρόγραμμα"
-        )
-
-        fig_base.update_traces(
-            texttemplate="%{text:.0f}",
-            textposition="outside"
-        )
-
-        fig_base.update_layout(
-            xaxis_title="Προπτυχιακό Πρόγραμμα",
-            yaxis_title="Βάση ΓΕΛ Ημερήσια",
-            yaxis_range=[0, 20000]
-        )
-
-        st.plotly_chart(
-            fig_base,
-            use_container_width=True
-        )
-
-    with chart_col4:
-        fig_empty = px.bar(
-            summary_display.sort_values("Κενές Θέσεις", ascending=False),
-            x="Προπτυχιακό Πρόγραμμα",
-            y="Κενές Θέσεις",
-            text="Κενές Θέσεις",
-            title="Κενές θέσεις ανά πρόγραμμα"
-        )
-
-        fig_empty.update_traces(
-            textposition="outside"
-        )
-
-        fig_empty.update_layout(
-            xaxis_title="Προπτυχιακό Πρόγραμμα",
-            yaxis_title="Κενές Θέσεις",
-            yaxis=dict(dtick=1)
-        )
-
-        st.plotly_chart(
-            fig_empty,
-            use_container_width=True
-        )
+    st.caption(
+        "Τα γραφήματα εμφανίζονται ένα κάθε φορά για καλύτερη αναγνωσιμότητα. "
+        "Η οριζόντια διάταξη βοηθά στην καθαρή εμφάνιση των ονομάτων των προγραμμάτων."
+    )
 
     st.divider()
+
+    # ---------------------------------------------------------
+    # Πίνακες δεδομένων
+    # ---------------------------------------------------------
 
     st.subheader("Πίνακες δεδομένων")
 
