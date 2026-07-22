@@ -639,28 +639,7 @@ try:
         "ώστε οι συγκρίσεις να είναι πιο καθαρές."
     )
 
-    st.divider()
 
-    st.subheader("Εξαγωγή για περαιτέρω διερεύνηση")
-
-    excel_file = create_excel_file(
-        gaps_display=gaps_display,
-        prompts_display=prompts_display,
-        selected_year=selected_year
-    )
-
-    st.download_button(
-        label="⬇️ Κατέβασμα Excel με τμήματα και AI prompts",
-        data=excel_file,
-        file_name=f"dipae_tmimata_me_kena_{selected_year}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    st.info(
-        "Το Excel περιλαμβάνει δύο φύλλα: "
-        "1) τα προγράμματα με αυξημένα κενά και "
-        "2) έτοιμα prompts για σύγκριση με ομοειδή τμήματα."
-    )
 
     st.divider()
 
