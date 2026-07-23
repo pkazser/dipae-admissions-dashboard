@@ -33,6 +33,7 @@ st.markdown("""
 - Για τη **ΓΕΛ Ημερήσια** χρησιμοποιούνται οι θέσεις της συγκεκριμένης κατηγορίας.
 - Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
 - Ο **Πρώτος Προγράμματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
+- Οι κενές θέσεις των κατηγοριών **10% ΓΕΛ** εμφανίζονται πληροφοριακά ανά κατηγορία και δεν πρέπει να αθροίζονται ξανά με τις συνολικές κενές θέσεις.
 """)
 
 st.divider()
@@ -78,6 +79,50 @@ def format_score(value):
         return "-"
 
 
+def is_gel_day_category(category):
+    """
+    Ελέγχει αν η κατηγορία είναι ΓΕΛ Ημερήσια.
+    """
+
+    category = str(category).strip()
+
+    return category == "ΓΕΛ Ημερήσια"
+
+
+def is_ten_percent_gel_category(category):
+    """
+    Ελέγχει αν η κατηγορία είναι 10% ΓΕΛ.
+
+    Παραδείγματα:
+    - 10% ΓΕΛ 2024
+    - 10% ΓΕΛ 2025
+    - 10% ΓΕΛ 2023
+    """
+
+    category = str(category).upper()
+
+    return "10%" in category and "ΓΕΛ" in category
+
+
+def get_category_note(category):
+    """
+    Επιστρέφει ερμηνευτική παρατήρηση για ειδικές κατηγορίες.
+    """
+
+    if is_ten_percent_gel_category(category):
+        return (
+            "Οι κενές θέσεις της κατηγορίας 10% ΓΕΛ μεταφέρονται / "
+            "απορροφώνται στη ΓΕΛ Ημερήσια και δεν αθροίζονται ξανά."
+        )
+
+    if is_gel_day_category(category):
+        return (
+            "Βασική κατηγορία αναφοράς για θέσεις, βάση και πρώτο."
+        )
+
+    return ""
+
+
 def get_gel_day_row(df_department):
     """
     Επιστρέφει τη γραμμή ΓΕΛ Ημερήσια για το επιλεγμένο πρόγραμμα.
@@ -99,7 +144,11 @@ def build_category_analysis_table(df_department):
 
     Για τη ΓΕΛ Ημερήσια χρησιμοποιούνται οι final_positions,
     επειδή σε αυτή την κατηγορία αποτυπώνονται οι θέσεις κατόπιν μεταφοράς.
+
     Για τις υπόλοιπες κατηγορίες χρησιμοποιούνται οι initial_positions.
+
+    Οι κενές θέσεις των κατηγοριών 10% ΓΕΛ εμφανίζονται πληροφοριακά.
+    Δεν πρέπει να αθροίζονται ξανά με τις συνολικές κενές θέσεις του προγράμματος.
     """
 
     df_display = df_department.copy()
@@ -109,7 +158,7 @@ def build_category_analysis_table(df_department):
         .fillna(0)
     )
 
-    gel_mask = df_display["exam_category"] == "ΓΕΛ Ημερήσια"
+    gel_mask = df_display["exam_category"].apply(is_gel_day_category)
 
     df_display.loc[gel_mask, "analysis_positions"] = (
         df_display.loc[gel_mask, "final_positions"]
@@ -142,6 +191,10 @@ def build_category_analysis_table(df_department):
         .fillna(0)
     )
 
+    df_display["category_note"] = df_display["exam_category"].apply(
+        get_category_note
+    )
+
     display = df_display[
         [
             "exam_category",
@@ -153,6 +206,7 @@ def build_category_analysis_table(df_department):
             "category_coverage",
             "first_score",
             "base_score",
+            "category_note",
         ]
     ].copy()
 
@@ -167,6 +221,7 @@ def build_category_analysis_table(df_department):
             "category_coverage": "Κάλυψη Κατηγορίας %",
             "first_score": "Βαθμός Πρώτου",
             "base_score": "Βάση Τελευταίου",
+            "category_note": "Παρατήρηση",
         }
     )
 
@@ -242,12 +297,29 @@ def highlight_coverage(val):
         return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
 
 
-def highlight_gel_day_row(row):
+def highlight_special_category_rows(row):
+    """
+    Χρωματίζει ειδικές γραμμές του πίνακα.
+
+    ΓΕΛ Ημερήσια:
+    - κίτρινο, επειδή είναι η βασική κατηγορία αναφοράς.
+
+    10% ΓΕΛ:
+    - γαλάζιο, επειδή οι κενές θέσεις εμφανίζονται πληροφοριακά
+      και δεν πρέπει να αθροίζονται ξανά με τις συνολικές κενές.
+    """
+
     category = str(row.get("Κατηγορία", ""))
 
-    if category == "ΓΕΛ Ημερήσια":
+    if is_gel_day_category(category):
         return [
             "background-color: #fff3cd; color: #664d03; font-weight: bold;"
+            for _ in row
+        ]
+
+    if is_ten_percent_gel_category(category):
+        return [
+            "background-color: #dbeafe; color: #1e3a8a; font-weight: bold;"
             for _ in row
         ]
 
@@ -260,7 +332,7 @@ def style_category_table(df):
     """
 
     style_obj = df.style.apply(
-        highlight_gel_day_row,
+        highlight_special_category_rows,
         axis=1
     )
 
@@ -744,7 +816,9 @@ try:
     # Πίνακας κατηγοριών
     # ---------------------------------------------------------
 
-    st.subheader("Ανάλυση ανά κατηγορία εισαγωγής")
+    st.subheader(
+        "Ανάλυση ανά κατηγορία εισαγωγής — πληροφοριακή ανάλυση, όχι άθροισμα συνολικών κενών"
+    )
 
     category_table = build_category_analysis_table(df_department)
 
@@ -755,9 +829,18 @@ try:
     )
 
     st.caption(
-        "Στον πίνακα η ΓΕΛ Ημερήσια επισημαίνεται με κίτρινο. "
-        "Για τη ΓΕΛ Ημερήσια οι θέσεις υπολογίζονται με βάση τις θέσεις της συγκεκριμένης κατηγορίας, "
-        "ενώ η συνολική εικόνα του προγράμματος υπολογίζεται επί όλων των κατηγοριών εισαγωγής."
+        "Στον πίνακα η ΓΕΛ Ημερήσια επισημαίνεται με κίτρινο, επειδή αποτελεί τη βασική "
+        "κατηγορία αναφοράς για τη βάση και τον πρώτο κάθε προγράμματος. "
+        "Οι γραμμές 10% ΓΕΛ επισημαίνονται με γαλάζιο. Οι κενές θέσεις των κατηγοριών "
+        "10% ΓΕΛ εμφανίζονται μόνο πληροφοριακά και δεν πρέπει να αθροίζονται ξανά "
+        "με τις συνολικές κενές θέσεις, καθώς οι αδιάθετες θέσεις μεταφέρονται / "
+        "απορροφώνται στη ΓΕΛ Ημερήσια."
+    )
+
+    st.info(
+        "Για τη συνολική εικόνα του προγράμματος χρησιμοποιούνται οι βασικοί δείκτες "
+        "στο επάνω μέρος της σελίδας: Συνολικές Θέσεις, Επιτυχόντες, Κενές Θέσεις "
+        "και Συνολική Κάλυψη."
     )
 
     st.divider()
@@ -796,7 +879,9 @@ try:
     )
 
     st.caption(
-        "Τα διαγράμματα αφορούν τις επιμέρους κατηγορίες εισαγωγής του επιλεγμένου προγράμματος."
+        "Τα διαγράμματα αφορούν τις επιμέρους κατηγορίες εισαγωγής του επιλεγμένου "
+        "προγράμματος. Οι κενές θέσεις των κατηγοριών 10% ΓΕΛ εμφανίζονται πληροφοριακά "
+        "και δεν πρέπει να αθροίζονται ξανά με τις συνολικές κενές θέσεις."
     )
 
 except Exception as e:
