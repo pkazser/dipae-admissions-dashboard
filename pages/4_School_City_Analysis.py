@@ -1,38 +1,63 @@
+import pandas as pd
 import streamlit as st
 import plotly.express as px
+
 from modules.database_manager import load_admissions_with_departments
 from components.sidebar_branding import show_sidebar_branding
 
+
+# ---------------------------------------------------------
+# Ρυθμίσεις σελίδας
+# ---------------------------------------------------------
+
 st.set_page_config(
-    page_title="Ανάλυση Σχολών & Πόλεων | ΔΙΠΑΕ",
+    page_title="Σχολές και Πόλεις | ΔΙΠΑΕ",
     page_icon="🏫",
     layout="wide"
 )
+
 show_sidebar_branding()
 
-st.title("🏫 Ανάλυση Σχολών και Πόλεων ΔΙ.ΠΑ.Ε.")
+
+st.title("🏫 Ανάλυση ανά Σχολή και Πόλη")
 
 st.markdown("""
-Σε αυτή τη σελίδα εξετάζουμε τα δεδομένα εισακτέων συγκεντρωτικά ανά **Σχολή**
-ή ανά **Πόλη**.
+Η σελίδα παρουσιάζει συγκεντρωτική εικόνα των εισακτέων ανά **Σχολή** και ανά **Πόλη**
+του ΔΙ.ΠΑ.Ε.
 
-**Μεθοδολογικοί κανόνες της εφαρμογής:**
+**Μεθοδολογικοί κανόνες:**
 
 - Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
 - Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
-- Η **Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
+- Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες όλων των κατηγοριών / Συνολικές Θέσεις.
+- Η **Κάλυψη ΓΕΛ Ημερήσια** υπολογίζεται μόνο για τη βασική κατηγορία ΓΕΛ Ημερήσια.
+- Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
-- Δεν χρησιμοποιούνται μέσοι όροι βάσεων σε επίπεδο Σχολής ή Πόλης.
-- Η **Βάση ΓΕΛ Ημερήσια** εμφανίζεται μόνο σε επίπεδο προπτυχιακού προγράμματος.
+- Δεν υπολογίζονται μέσοι όροι βάσεων ανά Σχολή ή Πόλη.
 """)
 
 st.divider()
 
 
-def get_gel_day_scores(df_year):
+# ---------------------------------------------------------
+# Βοηθητικές συναρτήσεις
+# ---------------------------------------------------------
+
+def safe_int(value):
+    try:
+        if pd.isna(value):
+            return 0
+        return int(round(float(value)))
+    except Exception:
+        return 0
+
+
+def get_gel_day_data(df_year):
     """
-    Επιστρέφει τη Βάση ΓΕΛ Ημερήσια ανά πρόγραμμα.
-    Χρησιμοποιείται μόνο στον αναλυτικό πίνακα προγραμμάτων.
+    Επιστρέφει στοιχεία ΓΕΛ Ημερήσια ανά πρόγραμμα.
+
+    Για τη ΓΕΛ Ημερήσια χρησιμοποιούμε τις final_positions,
+    γιατί εκεί φαίνονται οι θέσεις κατόπιν μεταφοράς.
     """
 
     df_gel = df_year[
@@ -40,12 +65,46 @@ def get_gel_day_scores(df_year):
     ].copy()
 
     if df_gel.empty:
-        return None
+        return pd.DataFrame(
+            columns=[
+                "department_code",
+                "gel_day_positions",
+                "gel_day_admitted",
+                "gel_day_empty",
+                "gel_day_coverage",
+                "gel_day_base_score",
+            ]
+        )
 
-    scores = (
+    df_gel["gel_day_positions"] = (
+        df_gel["final_positions"]
+        .fillna(df_gel["initial_positions"])
+    )
+
+    df_gel["gel_day_admitted"] = (
+        df_gel["admitted"]
+        .fillna(0)
+    )
+
+    df_gel["gel_day_empty"] = (
+        df_gel["gel_day_positions"]
+        - df_gel["gel_day_admitted"]
+    )
+
+    df_gel["gel_day_coverage"] = (
+        df_gel["gel_day_admitted"]
+        / df_gel["gel_day_positions"]
+        * 100
+    )
+
+    gel_data = (
         df_gel[
             [
                 "department_code",
+                "gel_day_positions",
+                "gel_day_admitted",
+                "gel_day_empty",
+                "gel_day_coverage",
                 "base_score",
             ]
         ]
@@ -57,15 +116,21 @@ def get_gel_day_scores(df_year):
         )
     )
 
-    return scores
+    return gel_data
 
 
 def build_department_summary(df_year):
     """
-    Δημιουργεί σύνοψη ανά ενεργό προπτυχιακό πρόγραμμα σπουδών.
+    Δημιουργεί σύνοψη ανά προπτυχιακό πρόγραμμα.
 
-    Οι συνολικές θέσεις είναι οι αρχικές θέσεις.
-    Η βάση προέρχεται από τη ΓΕΛ Ημερήσια.
+    Συνολική εικόνα:
+    - όλες οι κατηγορίες εισαγωγής
+    - συνολικές θέσεις = αρχικές θέσεις
+
+    ΓΕΛ Ημερήσια:
+    - θέσεις ΓΕΛ Ημερήσια
+    - επιτυχόντες ΓΕΛ Ημερήσια
+    - κάλυψη ΓΕΛ Ημερήσια
     """
 
     summary = (
@@ -90,119 +155,162 @@ def build_department_summary(df_year):
         - summary["total_admitted"]
     )
 
-    summary["coverage"] = (
+    summary["total_coverage"] = (
         summary["total_admitted"]
         / summary["total_positions"]
         * 100
     )
 
-    gel_scores = get_gel_day_scores(df_year)
+    gel_data = get_gel_day_data(df_year)
 
-    if gel_scores is not None:
-        summary = summary.merge(
-            gel_scores,
-            on="department_code",
-            how="left"
-        )
-    else:
-        summary["gel_day_base_score"] = None
+    summary = summary.merge(
+        gel_data,
+        on="department_code",
+        how="left"
+    )
+
+    for col in [
+        "gel_day_positions",
+        "gel_day_admitted",
+        "gel_day_empty",
+        "gel_day_coverage",
+        "gel_day_base_score",
+    ]:
+        if col not in summary.columns:
+            summary[col] = 0
+
+    for col in [
+        "gel_day_positions",
+        "gel_day_admitted",
+        "gel_day_empty",
+        "gel_day_coverage",
+    ]:
+        summary[col] = summary[col].fillna(0)
 
     return summary
 
 
-def build_group_summary(department_summary, group_field):
+def build_group_summary(department_summary, group_col):
     """
-    Δημιουργεί σύνοψη ανά Σχολή ή Πόλη.
+    Δημιουργεί συγκεντρωτικό πίνακα ανά Σχολή ή Πόλη.
 
-    Δεν υπολογίζει βάσεις ή μέσους όρους βάσεων.
+    Δεν υπολογίζει μέσο όρο βάσεων.
     """
 
-    summary = (
+    group_summary = (
         department_summary
-        .groupby(group_field, as_index=False)
+        .groupby(
+            group_col,
+            as_index=False
+        )
         .agg(
             programs=("department_code", "nunique"),
             total_positions=("total_positions", "sum"),
             total_admitted=("total_admitted", "sum"),
             empty_positions=("empty_positions", "sum"),
+            gel_day_positions=("gel_day_positions", "sum"),
+            gel_day_admitted=("gel_day_admitted", "sum"),
+            gel_day_empty=("gel_day_empty", "sum"),
         )
     )
 
-    summary["coverage"] = (
-        summary["total_admitted"]
-        / summary["total_positions"]
+    group_summary["total_coverage"] = (
+        group_summary["total_admitted"]
+        / group_summary["total_positions"]
         * 100
     )
 
-    return summary
+    group_summary["gel_day_coverage"] = (
+        group_summary["gel_day_admitted"]
+        / group_summary["gel_day_positions"]
+        * 100
+    )
+
+    group_summary["total_coverage"] = (
+        group_summary["total_coverage"]
+        .fillna(0)
+    )
+
+    group_summary["gel_day_coverage"] = (
+        group_summary["gel_day_coverage"]
+        .fillna(0)
+    )
+
+    return group_summary
 
 
-def format_group_table(df, group_field, group_label):
+def format_group_table(df, group_label):
     """
-    Μορφοποιεί τον πίνακα ανά Σχολή ή Πόλη.
+    Μορφοποίηση συγκεντρωτικού πίνακα ανά Σχολή ή Πόλη.
     """
 
     display = df[
         [
-            group_field,
+            group_label,
             "programs",
             "total_positions",
             "total_admitted",
             "empty_positions",
-            "coverage",
+            "total_coverage",
+            "gel_day_positions",
+            "gel_day_admitted",
+            "gel_day_empty",
+            "gel_day_coverage",
         ]
     ].copy()
 
     display = display.rename(
         columns={
-            group_field: group_label,
-            "programs": "Προπτυχιακά Προγράμματα",
+            group_label: "Ομάδα",
+            "programs": "Προγράμματα",
             "total_positions": "Συνολικές Θέσεις",
             "total_admitted": "Επιτυχόντες",
             "empty_positions": "Κενές Θέσεις",
-            "coverage": "Κάλυψη %",
+            "total_coverage": "Συνολική Κάλυψη %",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_empty": "Κενές ΓΕΛ Ημερήσια",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
         }
     )
 
-    display["Προπτυχιακά Προγράμματα"] = (
-        display["Προπτυχιακά Προγράμματα"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
+    for col in [
+        "Προγράμματα",
+        "Συνολικές Θέσεις",
+        "Επιτυχόντες",
+        "Κενές Θέσεις",
+        "ΓΕΛ Ημερήσια Θέσεις",
+        "ΓΕΛ Ημερήσια Επιτυχόντες",
+        "Κενές ΓΕΛ Ημερήσια",
+    ]:
+        display[col] = (
+            display[col]
+            .fillna(0)
+            .round(0)
+            .astype(int)
+        )
 
-    display["Συνολικές Θέσεις"] = (
-        display["Συνολικές Θέσεις"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
-
-    display["Επιτυχόντες"] = (
-        display["Επιτυχόντες"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
-
-    display["Κενές Θέσεις"] = (
-        display["Κενές Θέσεις"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
-
-    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+    for col in [
+        "Συνολική Κάλυψη %",
+        "Κάλυψη ΓΕΛ Ημ. %",
+    ]:
+        display[col] = (
+            display[col]
+            .fillna(0)
+            .round(2)
+        )
 
     return display
 
 
 def format_department_table(df):
     """
-    Μορφοποιεί τον αναλυτικό πίνακα προγραμμάτων.
+    Αναλυτικός πίνακας προγραμμάτων.
 
-    Κρατάμε μόνο τις στήλες που είναι χρήσιμες εδώ:
-    Πρόγραμμα, Σχολή, Πόλη, Θέσεις, Επιτυχόντες, Κάλυψη, Βάση ΓΕΛ.
+    Περιλαμβάνει:
+    - συνολική κάλυψη όλων των κατηγοριών
+    - κάλυψη ΓΕΛ Ημερήσια
+    - βάση ΓΕΛ Ημερήσια
     """
 
     display = df[
@@ -212,7 +320,12 @@ def format_department_table(df):
             "city",
             "total_positions",
             "total_admitted",
-            "coverage",
+            "empty_positions",
+            "total_coverage",
+            "gel_day_positions",
+            "gel_day_admitted",
+            "gel_day_empty",
+            "gel_day_coverage",
             "gel_day_base_score",
         ]
     ].copy()
@@ -224,42 +337,50 @@ def format_department_table(df):
             "city": "Πόλη",
             "total_positions": "Συνολικές Θέσεις",
             "total_admitted": "Επιτυχόντες",
-            "coverage": "Κάλυψη %",
+            "empty_positions": "Κενές Θέσεις",
+            "total_coverage": "Συνολική Κάλυψη %",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_empty": "Κενές ΓΕΛ Ημερήσια",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Συνολικές Θέσεις"] = (
-        display["Συνολικές Θέσεις"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
+    for col in [
+        "Συνολικές Θέσεις",
+        "Επιτυχόντες",
+        "Κενές Θέσεις",
+        "ΓΕΛ Ημερήσια Θέσεις",
+        "ΓΕΛ Ημερήσια Επιτυχόντες",
+        "Κενές ΓΕΛ Ημερήσια",
+        "Βάση ΓΕΛ Ημ.",
+    ]:
+        display[col] = (
+            display[col]
+            .fillna(0)
+            .round(0)
+            .astype(int)
+        )
 
-    display["Επιτυχόντες"] = (
-        display["Επιτυχόντες"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
-
-    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
-
-    display["Βάση ΓΕΛ Ημ."] = (
-        display["Βάση ΓΕΛ Ημ."]
-        .fillna(0)
-        .round(0)
-        .astype(int)
-    )
+    for col in [
+        "Συνολική Κάλυψη %",
+        "Κάλυψη ΓΕΛ Ημ. %",
+    ]:
+        display[col] = (
+            display[col]
+            .fillna(0)
+            .round(2)
+        )
 
     return display
 
 
-def highlight_empty_positions(val):
-    """
-    Χρωματισμός κενών θέσεων.
-    """
+# ---------------------------------------------------------
+# Styling πινάκων
+# ---------------------------------------------------------
 
+def highlight_empty_positions(val):
     try:
         value = float(val)
     except Exception:
@@ -272,10 +393,6 @@ def highlight_empty_positions(val):
 
 
 def highlight_coverage(val):
-    """
-    Χρωματισμός κάλυψης.
-    """
-
     try:
         value = float(val)
     except Exception:
@@ -289,190 +406,278 @@ def highlight_coverage(val):
         return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
 
 
-def style_group_table(df):
+def style_table(df):
     """
-    Styling για πίνακες Σχολών/Πόλεων.
+    Κοινό styling για πίνακες.
 
-    Η Κάλυψη % εμφανίζεται πάντα με 2 δεκαδικά και σύμβολο %.
-    """
-
-    style_obj = df.style
-
-    format_dict = {}
-
-    if "Κάλυψη %" in df.columns:
-        format_dict["Κάλυψη %"] = "{:.2f}%"
-
-    if format_dict:
-        style_obj = style_obj.format(format_dict)
-
-    if "Κενές Θέσεις" in df.columns:
-        try:
-            style_obj = style_obj.map(
-                highlight_empty_positions,
-                subset=["Κενές Θέσεις"]
-            )
-        except AttributeError:
-            style_obj = style_obj.applymap(
-                highlight_empty_positions,
-                subset=["Κενές Θέσεις"]
-            )
-
-    if "Κάλυψη %" in df.columns:
-        try:
-            style_obj = style_obj.map(
-                highlight_coverage,
-                subset=["Κάλυψη %"]
-            )
-        except AttributeError:
-            style_obj = style_obj.applymap(
-                highlight_coverage,
-                subset=["Κάλυψη %"]
-            )
-
-    return style_obj
-
-
-def style_department_table(df):
-    """
-    Styling για αναλυτικό πίνακα προγραμμάτων.
-
-    Η Κάλυψη % εμφανίζεται πάντα με 2 δεκαδικά και σύμβολο %.
+    Όλες οι στήλες κάλυψης εμφανίζονται με 2 δεκαδικά και σύμβολο %.
     """
 
     style_obj = df.style
 
     format_dict = {}
 
-    if "Κάλυψη %" in df.columns:
-        format_dict["Κάλυψη %"] = "{:.2f}%"
+    for col in df.columns:
+        if "Κάλυψη" in col and "%" in col:
+            format_dict[col] = "{:.2f}%"
 
     if format_dict:
         style_obj = style_obj.format(format_dict)
 
-    if "Κάλυψη %" in df.columns:
+    empty_columns = [
+        col for col in df.columns
+        if "Κενές" in col
+    ]
+
+    for col in empty_columns:
+        try:
+            style_obj = style_obj.map(
+                highlight_empty_positions,
+                subset=[col]
+            )
+        except AttributeError:
+            style_obj = style_obj.applymap(
+                highlight_empty_positions,
+                subset=[col]
+            )
+
+    coverage_columns = [
+        col for col in df.columns
+        if "Κάλυψη" in col and "%" in col
+    ]
+
+    for col in coverage_columns:
         try:
             style_obj = style_obj.map(
                 highlight_coverage,
-                subset=["Κάλυψη %"]
+                subset=[col]
             )
         except AttributeError:
             style_obj = style_obj.applymap(
                 highlight_coverage,
-                subset=["Κάλυψη %"]
+                subset=[col]
             )
 
     return style_obj
 
 
-def show_group_dashboard(group_display, group_label):
+# ---------------------------------------------------------
+# Γραφήματα
+# ---------------------------------------------------------
+
+def create_positions_chart(group_display):
     """
-    Εμφανίζει dashboard για Σχολές ή Πόλεις.
+    Θέσεις και επιτυχόντες ανά ομάδα.
     """
 
-    st.subheader(f"Ανάλυση ανά {group_label}")
+    chart_df = group_display[
+        [
+            "Ομάδα",
+            "Συνολικές Θέσεις",
+            "Επιτυχόντες",
+        ]
+    ].copy()
 
-    st.dataframe(
-        style_group_table(group_display),
-        use_container_width=True,
-        hide_index=True
+    chart_long = chart_df.melt(
+        id_vars="Ομάδα",
+        value_vars=[
+            "Συνολικές Θέσεις",
+            "Επιτυχόντες",
+        ],
+        var_name="Δείκτης",
+        value_name="Πλήθος"
     )
 
-    chart_col1, chart_col2 = st.columns(2)
+    fig = px.bar(
+        chart_long,
+        x="Ομάδα",
+        y="Πλήθος",
+        color="Δείκτης",
+        barmode="group",
+        text="Πλήθος",
+        title="Συνολικές θέσεις και επιτυχόντες ανά ομάδα"
+    )
 
-    with chart_col1:
-        fig_positions = px.bar(
-            group_display.sort_values("Συνολικές Θέσεις", ascending=False),
-            x=group_label,
-            y=["Συνολικές Θέσεις", "Επιτυχόντες"],
-            barmode="group",
-            title=f"Συνολικές θέσεις και επιτυχόντες ανά {group_label}"
-        )
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
 
-        fig_positions.update_layout(
-            xaxis_title=group_label,
-            yaxis_title="Πλήθος",
-            legend_title=""
-        )
+    max_value = (
+        chart_long["Πλήθος"].max()
+        if not chart_long.empty
+        else 0
+    )
 
-        st.plotly_chart(
-            fig_positions,
-            use_container_width=True
-        )
+    fig.update_layout(
+        height=560,
+        xaxis_title="",
+        yaxis_title="Πλήθος",
+        yaxis_range=[0, max(10, max_value * 1.25)],
+        legend_title="",
+        margin=dict(l=20, r=80, t=80, b=120)
+    )
 
-    with chart_col2:
-        fig_coverage = px.bar(
-            group_display.sort_values("Κάλυψη %", ascending=False),
-            x=group_label,
-            y="Κάλυψη %",
-            text="Κάλυψη %",
-            title=f"Κάλυψη ανά {group_label}"
-        )
+    fig.update_xaxes(
+        tickangle=-30
+    )
 
-        fig_coverage.update_traces(
-            texttemplate="%{text:.2f}%",
-            textposition="outside"
-        )
+    return fig
 
-        fig_coverage.update_layout(
-            xaxis_title=group_label,
-            yaxis_title="Κάλυψη %",
-            yaxis_range=[0, 100]
-        )
 
-        st.plotly_chart(
-            fig_coverage,
-            use_container_width=True
-        )
+def create_coverage_chart(group_display):
+    """
+    Συνολική κάλυψη και κάλυψη ΓΕΛ Ημερήσια ανά ομάδα.
+    """
 
-    chart_col3, chart_col4 = st.columns(2)
+    chart_df = group_display[
+        [
+            "Ομάδα",
+            "Συνολική Κάλυψη %",
+            "Κάλυψη ΓΕΛ Ημ. %",
+        ]
+    ].copy()
 
-    with chart_col3:
-        fig_admitted = px.bar(
-            group_display.sort_values("Επιτυχόντες", ascending=False),
-            x=group_label,
-            y="Επιτυχόντες",
-            text="Επιτυχόντες",
-            title=f"Επιτυχόντες ανά {group_label}"
-        )
+    chart_long = chart_df.melt(
+        id_vars="Ομάδα",
+        value_vars=[
+            "Συνολική Κάλυψη %",
+            "Κάλυψη ΓΕΛ Ημ. %",
+        ],
+        var_name="Δείκτης",
+        value_name="Κάλυψη %"
+    )
 
-        fig_admitted.update_traces(
-            textposition="outside"
-        )
+    fig = px.bar(
+        chart_long,
+        x="Ομάδα",
+        y="Κάλυψη %",
+        color="Δείκτης",
+        barmode="group",
+        text="Κάλυψη %",
+        title="Συνολική κάλυψη και κάλυψη ΓΕΛ Ημερήσια ανά ομάδα"
+    )
 
-        fig_admitted.update_layout(
-            xaxis_title=group_label,
-            yaxis_title="Επιτυχόντες"
-        )
+    fig.update_traces(
+        texttemplate="%{text:.2f}%",
+        textposition="outside",
+        cliponaxis=False
+    )
 
-        st.plotly_chart(
-            fig_admitted,
-            use_container_width=True
-        )
+    fig.update_layout(
+        height=560,
+        xaxis_title="",
+        yaxis_title="Κάλυψη %",
+        yaxis_range=[0, 115],
+        legend_title="",
+        margin=dict(l=20, r=80, t=80, b=120)
+    )
 
-    with chart_col4:
-        fig_empty = px.bar(
-            group_display.sort_values("Κενές Θέσεις", ascending=False),
-            x=group_label,
-            y="Κενές Θέσεις",
-            text="Κενές Θέσεις",
-            title=f"Κενές θέσεις ανά {group_label}"
-        )
+    fig.update_yaxes(
+        tickformat=".0f"
+    )
 
-        fig_empty.update_traces(
-            textposition="outside"
-        )
+    fig.update_xaxes(
+        tickangle=-30
+    )
 
-        fig_empty.update_layout(
-            xaxis_title=group_label,
-            yaxis_title="Κενές Θέσεις"
-        )
+    return fig
 
-        st.plotly_chart(
-            fig_empty,
-            use_container_width=True
-        )
 
+def create_admitted_chart(group_display):
+    """
+    Επιτυχόντες ανά ομάδα.
+    """
+
+    chart_df = group_display.sort_values(
+        "Επιτυχόντες",
+        ascending=False
+    ).copy()
+
+    fig = px.bar(
+        chart_df,
+        x="Ομάδα",
+        y="Επιτυχόντες",
+        text="Επιτυχόντες",
+        title="Επιτυχόντες ανά ομάδα"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    max_value = (
+        chart_df["Επιτυχόντες"].max()
+        if not chart_df.empty
+        else 0
+    )
+
+    fig.update_layout(
+        height=560,
+        xaxis_title="",
+        yaxis_title="Επιτυχόντες",
+        yaxis_range=[0, max(10, max_value * 1.25)],
+        margin=dict(l=20, r=80, t=80, b=120)
+    )
+
+    fig.update_xaxes(
+        tickangle=-30
+    )
+
+    return fig
+
+
+def create_empty_chart(group_display):
+    """
+    Κενές θέσεις ανά ομάδα.
+    """
+
+    chart_df = group_display.sort_values(
+        "Κενές Θέσεις",
+        ascending=False
+    ).copy()
+
+    fig = px.bar(
+        chart_df,
+        x="Ομάδα",
+        y="Κενές Θέσεις",
+        text="Κενές Θέσεις",
+        title="Κενές θέσεις ανά ομάδα"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    max_value = (
+        chart_df["Κενές Θέσεις"].max()
+        if not chart_df.empty
+        else 0
+    )
+
+    fig.update_layout(
+        height=560,
+        xaxis_title="",
+        yaxis_title="Κενές Θέσεις",
+        yaxis_range=[0, max(5, max_value * 1.25)],
+        margin=dict(l=20, r=80, t=80, b=120)
+    )
+
+    fig.update_xaxes(
+        tickangle=-30
+    )
+
+    return fig
+
+
+# ---------------------------------------------------------
+# Κύρια ροή
+# ---------------------------------------------------------
 
 try:
     df = load_admissions_with_departments()
@@ -483,24 +688,11 @@ try:
 
     years = sorted(df["year"].dropna().unique().tolist())
 
-    col_year, col_level = st.columns(2)
-
-    with col_year:
-        selected_year = st.selectbox(
-            "Έτος",
-            years,
-            index=len(years) - 1
-        )
-
-    with col_level:
-        analysis_level = st.radio(
-            "Επίπεδο ανάλυσης",
-            [
-                "Σχολές",
-                "Πόλεις",
-            ],
-            horizontal=True
-        )
+    selected_year = st.selectbox(
+        "Έτος",
+        years,
+        index=len(years) - 1
+    )
 
     df_year = df[df["year"] == selected_year].copy()
 
@@ -510,23 +702,13 @@ try:
 
     department_summary = build_department_summary(df_year)
 
-    school_summary = build_group_summary(
-        department_summary,
-        "school"
-    )
-
-    city_summary = build_group_summary(
-        department_summary,
-        "city"
-    )
-
     total_programs = int(department_summary["department_code"].nunique())
     total_schools = int(department_summary["school"].nunique())
     total_cities = int(department_summary["city"].nunique())
 
-    total_positions = int(department_summary["total_positions"].sum())
-    total_admitted = int(department_summary["total_admitted"].sum())
-    total_empty_positions = int(department_summary["empty_positions"].sum())
+    total_positions = safe_int(department_summary["total_positions"].sum())
+    total_admitted = safe_int(department_summary["total_admitted"].sum())
+    total_empty_positions = safe_int(department_summary["empty_positions"].sum())
 
     total_coverage = (
         total_admitted / total_positions * 100
@@ -534,7 +716,25 @@ try:
         else 0
     )
 
-    st.subheader(f"Συνολική εικόνα {selected_year}")
+    total_gel_day_positions = safe_int(
+        department_summary["gel_day_positions"]
+        .fillna(0)
+        .sum()
+    )
+
+    total_gel_day_admitted = safe_int(
+        department_summary["gel_day_admitted"]
+        .fillna(0)
+        .sum()
+    )
+
+    total_gel_day_coverage = (
+        total_gel_day_admitted / total_gel_day_positions * 100
+        if total_gel_day_positions > 0
+        else 0
+    )
+
+    st.subheader(f"Συνολική εικόνα ανά Σχολή και Πόλη {selected_year}")
 
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
@@ -562,7 +762,7 @@ try:
             total_positions
         )
 
-    kpi5, kpi6, kpi7 = st.columns(3)
+    kpi5, kpi6, kpi7, kpi8 = st.columns(4)
 
     with kpi5:
         st.metric(
@@ -582,90 +782,124 @@ try:
             f"{total_coverage:.2f}%"
         )
 
+    with kpi8:
+        st.metric(
+            "Κάλυψη ΓΕΛ Ημερήσια",
+            f"{total_gel_day_coverage:.2f}%"
+        )
+
     st.caption(
-        "Η ανάλυση περιλαμβάνει όλες τις κατηγορίες εισαγωγής. "
-        "Οι Συνολικές Θέσεις είναι οι αρχικές θέσεις."
+        "Η Συνολική Κάλυψη αφορά όλες τις κατηγορίες εισαγωγής. "
+        "Η Κάλυψη ΓΕΛ Ημερήσια αφορά αποκλειστικά τη βασική κατηγορία ΓΕΛ Ημερήσια."
     )
 
     st.divider()
 
-    if analysis_level == "Σχολές":
-        school_display = format_group_table(
-            school_summary.sort_values("coverage", ascending=False),
-            group_field="school",
-            group_label="Σχολή"
-        )
-
-        show_group_dashboard(
-            group_display=school_display,
-            group_label="Σχολή"
-        )
-
-    else:
-        city_display = format_group_table(
-            city_summary.sort_values("coverage", ascending=False),
-            group_field="city",
-            group_label="Πόλη"
-        )
-
-        show_group_dashboard(
-            group_display=city_display,
-            group_label="Πόλη"
-        )
-
-    st.divider()
-
-    st.subheader("Αναλυτικός πίνακας ενεργών προπτυχιακών προγραμμάτων")
-
-    department_display = format_department_table(
-        department_summary.sort_values(
-            "gel_day_base_score",
-            ascending=False,
-            na_position="last"
-        )
+    analysis_mode = st.radio(
+        "Επιλέξτε επίπεδο ανάλυσης",
+        [
+            "Σχολές",
+            "Πόλεις",
+        ],
+        horizontal=True
     )
 
-    if analysis_level == "Σχολές":
-        selected_group_options = ["Όλες οι Σχολές"] + sorted(
-            department_display["Σχολή"].dropna().unique().tolist()
-        )
-
-        selected_group = st.selectbox(
-            "Φίλτρο Σχολής στον αναλυτικό πίνακα",
-            selected_group_options
-        )
-
-        if selected_group != "Όλες οι Σχολές":
-            department_display = department_display[
-                department_display["Σχολή"] == selected_group
-            ].copy()
-
+    if analysis_mode == "Σχολές":
+        group_col = "school"
+        group_title = "Σχολές"
     else:
-        selected_group_options = ["Όλες οι Πόλεις"] + sorted(
-            department_display["Πόλη"].dropna().unique().tolist()
-        )
+        group_col = "city"
+        group_title = "Πόλεις"
 
-        selected_group = st.selectbox(
-            "Φίλτρο Πόλης στον αναλυτικό πίνακα",
-            selected_group_options
-        )
+    group_summary = build_group_summary(
+        department_summary=department_summary,
+        group_col=group_col
+    )
 
-        if selected_group != "Όλες οι Πόλεις":
-            department_display = department_display[
-                department_display["Πόλη"] == selected_group
-            ].copy()
+    group_display = format_group_table(
+        df=group_summary,
+        group_label=group_col
+    )
+
+    group_display = group_display.sort_values(
+        "Συνολική Κάλυψη %",
+        ascending=True
+    )
+
+    st.subheader(f"Συγκεντρωτικός πίνακας ανά {group_title}")
 
     st.dataframe(
-        style_department_table(department_display),
+        style_table(group_display),
         use_container_width=True,
         hide_index=True
     )
 
     st.caption(
-        "Στον αναλυτικό πίνακα εμφανίζεται η Βάση ΓΕΛ Ημερήσια χωρίς δεκαδικά. "
-        "Δεν εμφανίζονται Μόρια Πρώτου και Κενές Θέσεις ώστε ο πίνακας να είναι πιο ευανάγνωστος."
+        "Η «Συνολική Κάλυψη %» υπολογίζεται επί των συνολικών θέσεων όλων "
+        "των κατηγοριών εισαγωγής. Η «Κάλυψη ΓΕΛ Ημ. %» υπολογίζεται μόνο "
+        "επί των θέσεων της ΓΕΛ Ημερήσιας."
+    )
+
+    st.divider()
+
+    st.subheader(f"Βασικά διαγράμματα ανά {group_title}")
+
+    chart_choice = st.selectbox(
+        "Επιλέξτε διάγραμμα",
+        [
+            "Συνολικές θέσεις και επιτυχόντες",
+            "Συνολική κάλυψη και κάλυψη ΓΕΛ Ημερήσια",
+            "Επιτυχόντες",
+            "Κενές θέσεις",
+        ]
+    )
+
+    if chart_choice == "Συνολικές θέσεις και επιτυχόντες":
+        fig = create_positions_chart(group_display)
+
+    elif chart_choice == "Συνολική κάλυψη και κάλυψη ΓΕΛ Ημερήσια":
+        fig = create_coverage_chart(group_display)
+
+    elif chart_choice == "Επιτυχόντες":
+        fig = create_admitted_chart(group_display)
+
+    else:
+        fig = create_empty_chart(group_display)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    st.caption(
+        "Τα διαγράμματα παρουσιάζουν συγκεντρωτικά στοιχεία ανά επιλεγμένη ομάδα "
+        "και όχι μεμονωμένα ανά πρόγραμμα."
+    )
+
+    st.divider()
+
+    st.subheader("Αναλυτικός πίνακας προγραμμάτων")
+
+    department_display = format_department_table(
+        department_summary.sort_values(
+            [
+                group_col,
+                "department_name_clean",
+            ]
+        )
+    )
+
+    st.dataframe(
+        style_table(department_display),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.caption(
+        "Στον αναλυτικό πίνακα εμφανίζονται τόσο η Συνολική Κάλυψη όλων των κατηγοριών "
+        "όσο και η Κάλυψη ΓΕΛ Ημερήσια ανά πρόγραμμα."
     )
 
 except Exception as e:
-    st.error("Υπήρξε πρόβλημα κατά την ανάλυση ανά Σχολή ή Πόλη.")
+    st.error("Υπήρξε πρόβλημα κατά την ανάλυση ανά Σχολή και Πόλη.")
     st.exception(e)

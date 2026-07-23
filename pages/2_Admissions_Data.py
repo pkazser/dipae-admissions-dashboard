@@ -1,5 +1,7 @@
+import pandas as pd
 import streamlit as st
 import plotly.express as px
+
 from modules.database_manager import load_admissions_with_departments
 from components.sidebar_branding import show_sidebar_branding
 
@@ -24,6 +26,7 @@ st.markdown("""
 - Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
 - Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
 - Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
+- Η **Κάλυψη ΓΕΛ Ημερήσια** υπολογίζεται μόνο για τη βασική κατηγορία ΓΕΛ Ημερήσια.
 - Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
 - Ο **Πρώτος Προγράμματος** είναι ο **Πρώτος ΓΕΛ Ημερήσια**.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
@@ -36,9 +39,12 @@ st.divider()
 # Βοηθητικές συναρτήσεις δεδομένων
 # ---------------------------------------------------------
 
-def get_gel_day_scores(df_year):
+def get_gel_day_data(df_year):
     """
-    Επιστρέφει τη βάση και τον βαθμό πρώτου της ΓΕΛ Ημερήσια ανά πρόγραμμα.
+    Επιστρέφει στοιχεία ΓΕΛ Ημερήσια ανά πρόγραμμα.
+
+    Για τη ΓΕΛ Ημερήσια χρησιμοποιούμε τις final_positions,
+    γιατί εκεί φαίνονται οι θέσεις κατόπιν μεταφοράς.
     """
 
     df_gel = df_year[
@@ -46,12 +52,47 @@ def get_gel_day_scores(df_year):
     ].copy()
 
     if df_gel.empty:
-        return None
+        return pd.DataFrame(
+            columns=[
+                "department_code",
+                "gel_day_positions",
+                "gel_day_admitted",
+                "gel_day_empty",
+                "gel_day_coverage",
+                "gel_day_first_score",
+                "gel_day_base_score",
+            ]
+        )
 
-    scores = (
+    df_gel["gel_day_positions"] = (
+        df_gel["final_positions"]
+        .fillna(df_gel["initial_positions"])
+    )
+
+    df_gel["gel_day_admitted"] = (
+        df_gel["admitted"]
+        .fillna(0)
+    )
+
+    df_gel["gel_day_empty"] = (
+        df_gel["gel_day_positions"]
+        - df_gel["gel_day_admitted"]
+    )
+
+    df_gel["gel_day_coverage"] = (
+        df_gel["gel_day_admitted"]
+        / df_gel["gel_day_positions"]
+        * 100
+    )
+
+    gel_data = (
         df_gel[
             [
                 "department_code",
+                "gel_day_positions",
+                "gel_day_admitted",
+                "gel_day_empty",
+                "gel_day_coverage",
                 "first_score",
                 "base_score",
             ]
@@ -65,7 +106,7 @@ def get_gel_day_scores(df_year):
         )
     )
 
-    return scores
+    return gel_data
 
 
 def build_department_summary(df_year):
@@ -105,17 +146,24 @@ def build_department_summary(df_year):
         * 100
     )
 
-    gel_scores = get_gel_day_scores(df_year)
+    gel_data = get_gel_day_data(df_year)
 
-    if gel_scores is not None:
-        summary = summary.merge(
-            gel_scores,
-            on="department_code",
-            how="left"
-        )
-    else:
-        summary["gel_day_first_score"] = None
-        summary["gel_day_base_score"] = None
+    summary = summary.merge(
+        gel_data,
+        on="department_code",
+        how="left"
+    )
+
+    for col in [
+        "gel_day_positions",
+        "gel_day_admitted",
+        "gel_day_empty",
+        "gel_day_coverage",
+        "gel_day_first_score",
+        "gel_day_base_score",
+    ]:
+        if col not in summary.columns:
+            summary[col] = None
 
     return summary
 
@@ -127,9 +175,6 @@ def build_department_summary(df_year):
 def format_summary_table(df):
     """
     Συνοπτικός πίνακας ανά πρόγραμμα.
-
-    Δεν εμφανίζουμε Πρώτο ΓΕΛ Ημ. και Κενές Θέσεις εδώ,
-    ώστε ο πίνακας να είναι καθαρός και να φαίνεται εύκολα η βάση.
     """
 
     display = df[
@@ -140,6 +185,7 @@ def format_summary_table(df):
             "total_positions",
             "total_admitted",
             "coverage",
+            "gel_day_coverage",
             "gel_day_base_score",
         ]
     ].copy()
@@ -152,12 +198,20 @@ def format_summary_table(df):
             "total_positions": "Συνολικές Θέσεις",
             "total_admitted": "Επιτυχόντες",
             "coverage": "Συνολική Κάλυψη %",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
     display["Συνολική Κάλυψη %"] = (
         display["Συνολική Κάλυψη %"]
+        .fillna(0)
+        .round(2)
+    )
+
+    display["Κάλυψη ΓΕΛ Ημ. %"] = (
+        display["Κάλυψη ΓΕΛ Ημ. %"]
+        .fillna(0)
         .round(2)
     )
 
@@ -186,6 +240,7 @@ def format_detailed_summary_table(df):
             "total_admitted",
             "empty_positions",
             "coverage",
+            "gel_day_coverage",
             "gel_day_first_score",
             "gel_day_base_score",
         ]
@@ -200,6 +255,7 @@ def format_detailed_summary_table(df):
             "total_admitted": "Επιτυχόντες",
             "empty_positions": "Κενές Θέσεις",
             "coverage": "Συνολική Κάλυψη %",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
             "gel_day_first_score": "Πρώτος ΓΕΛ Ημ.",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
@@ -207,6 +263,13 @@ def format_detailed_summary_table(df):
 
     display["Συνολική Κάλυψη %"] = (
         display["Συνολική Κάλυψη %"]
+        .fillna(0)
+        .round(2)
+    )
+
+    display["Κάλυψη ΓΕΛ Ημ. %"] = (
+        display["Κάλυψη ΓΕΛ Ημ. %"]
+        .fillna(0)
         .round(2)
     )
 
@@ -230,6 +293,9 @@ def format_raw_table(df):
 
     Εδώ εμφανίζονται οι αρχικές θέσεις, οι επιτυχόντες και οι βάσεις ανά κατηγορία,
     χωρίς τελικές θέσεις ή φαινόμενες μεταβολές.
+
+    Προσθέτουμε και Κάλυψη ΓΕΛ Ημ. %, ώστε να υπάρχει κοινό σημείο αναφοράς
+    με τους πίνακες σύνοψης.
     """
 
     display = df[
@@ -266,6 +332,13 @@ def format_raw_table(df):
         }
     )
 
+    # Υπολογισμός κάλυψης ανά εγγραφή/κατηγορία
+    display["Κάλυψη Κατηγορίας %"] = (
+        display["Επιτυχόντες"]
+        / display["Αρχικές Θέσεις"]
+        * 100
+    ).fillna(0).round(2)
+
     for col in [
         "Βαθμός Πρώτου",
         "Βάση Τελευταίου",
@@ -278,8 +351,6 @@ def format_raw_table(df):
         )
 
     return display
-
-
 # ---------------------------------------------------------
 # Styling πινάκων
 # ---------------------------------------------------------
@@ -429,8 +500,6 @@ def apply_large_chart_layout(fig, title, xaxis_title, yaxis_title):
 def create_positions_chart(summary_display):
     """
     Οριζόντιο γράφημα συνολικών θέσεων και επιτυχόντων ανά πρόγραμμα.
-
-    Χρησιμοποιούμε long μορφή δεδομένων για καλύτερο έλεγχο των labels.
     """
 
     chart_df = summary_display[
@@ -501,6 +570,10 @@ def create_positions_chart(summary_display):
 def create_coverage_chart(summary_display):
     """
     Οριζόντιο γράφημα συνολικής κάλυψης ανά πρόγραμμα.
+
+    Στο άκρο κάθε ράβδου εμφανίζεται:
+    - η Συνολική Κάλυψη
+    - η Κάλυψη ΓΕΛ Ημερήσια με έντονη γραφή
     """
 
     chart_df = summary_display.sort_values(
@@ -508,13 +581,78 @@ def create_coverage_chart(summary_display):
         ascending=True
     ).copy()
 
+    chart_df["label_text"] = chart_df.apply(
+        lambda row: (
+            f'{row["Συνολική Κάλυψη %"]:.2f}% | '
+            f'<b>ΓΕΛ Ημ.: {row["Κάλυψη ΓΕΛ Ημ. %"]:.2f}%</b>'
+        ),
+        axis=1
+    )
+
     fig = px.bar(
         chart_df,
         x="Συνολική Κάλυψη %",
         y="Προπτυχιακό Πρόγραμμα",
         orientation="h",
-        text="Συνολική Κάλυψη %",
+        text="label_text",
         title="Συνολική κάλυψη ανά πρόγραμμα"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text}",
+        textposition="outside",
+        textfont_size=10,
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, 135]
+    )
+
+    fig = apply_large_chart_layout(
+        fig=fig,
+        title="Συνολική κάλυψη ανά πρόγραμμα",
+        xaxis_title="Συνολική Κάλυψη %",
+        yaxis_title=""
+    )
+
+    fig.add_annotation(
+        text=(
+            "Σημείωση: Η πρώτη τιμή δείχνει τη Συνολική Κάλυψη. "
+            "<b>Η έντονη τιμή δείχνει την Κάλυψη ΓΕΛ Ημερήσια.</b>"
+        ),
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=-0.12,
+        showarrow=False,
+        align="left",
+        font=dict(size=12)
+    )
+
+    fig.update_layout(
+        margin=dict(l=20, r=280, t=80, b=90)
+    )
+
+    return fig
+
+def create_gel_day_coverage_chart(summary_display):
+    """
+    Οριζόντιο γράφημα κάλυψης ΓΕΛ Ημερήσια ανά πρόγραμμα.
+    """
+
+    chart_df = summary_display.sort_values(
+        "Κάλυψη ΓΕΛ Ημ. %",
+        ascending=True
+    ).copy()
+
+    fig = px.bar(
+        chart_df,
+        x="Κάλυψη ΓΕΛ Ημ. %",
+        y="Προπτυχιακό Πρόγραμμα",
+        orientation="h",
+        text="Κάλυψη ΓΕΛ Ημ. %",
+        title="Κάλυψη ΓΕΛ Ημερήσια ανά πρόγραμμα"
     )
 
     fig.update_traces(
@@ -530,8 +668,8 @@ def create_coverage_chart(summary_display):
 
     fig = apply_large_chart_layout(
         fig=fig,
-        title="Συνολική κάλυψη ανά πρόγραμμα",
-        xaxis_title="Συνολική Κάλυψη %",
+        title="Κάλυψη ΓΕΛ Ημερήσια ανά πρόγραμμα",
+        xaxis_title="Κάλυψη ΓΕΛ Ημερήσια %",
         yaxis_title=""
     )
 
@@ -641,6 +779,8 @@ def create_empty_chart(summary_display):
     )
 
     return fig
+
+
 # ---------------------------------------------------------
 # Κύρια ροή
 # ---------------------------------------------------------
@@ -679,6 +819,24 @@ try:
     total_coverage = (
         total_admitted / total_positions * 100
         if total_positions > 0
+        else 0
+    )
+
+    total_gel_day_positions = int(
+        department_summary["gel_day_positions"]
+        .fillna(0)
+        .sum()
+    )
+
+    total_gel_day_admitted = int(
+        department_summary["gel_day_admitted"]
+        .fillna(0)
+        .sum()
+    )
+
+    total_gel_day_coverage = (
+        total_gel_day_admitted / total_gel_day_positions * 100
+        if total_gel_day_positions > 0
         else 0
     )
 
@@ -736,13 +894,15 @@ try:
 
     with kpi8:
         st.metric(
-            "Προγράμματα με Βάση ΓΕΛ Ημ.",
-            gel_day_available
+            "Κάλυψη ΓΕΛ Ημερήσια",
+            f"{total_gel_day_coverage:.2f}%"
         )
 
     st.caption(
         "Η ανάλυση περιλαμβάνει όλες τις κατηγορίες εισαγωγής. "
         "Οι Συνολικές Θέσεις είναι οι αρχικές θέσεις. "
+        "Η Συνολική Κάλυψη αφορά όλες τις κατηγορίες, ενώ η Κάλυψη ΓΕΛ Ημερήσια "
+        "υπολογίζεται μόνο για τη βασική κατηγορία ΓΕΛ Ημερήσια. "
         "Η Βάση Προγράμματος είναι η Βάση ΓΕΛ Ημερήσια."
     )
 
@@ -761,6 +921,7 @@ try:
         [
             "Συνολικές θέσεις και επιτυχόντες",
             "Συνολική κάλυψη",
+            "Κάλυψη ΓΕΛ Ημερήσια",
             "Βάση ΓΕΛ Ημερήσια",
             "Κενές θέσεις",
         ]
@@ -771,6 +932,9 @@ try:
 
     elif chart_choice == "Συνολική κάλυψη":
         fig = create_coverage_chart(summary_display)
+
+    elif chart_choice == "Κάλυψη ΓΕΛ Ημερήσια":
+        fig = create_gel_day_coverage_chart(summary_display)
 
     elif chart_choice == "Βάση ΓΕΛ Ημερήσια":
         fig = create_base_chart(summary_display)
@@ -806,7 +970,8 @@ try:
 
     coverage_note = (
         "Η «Συνολική Κάλυψη %» υπολογίζεται επί των συνολικών θέσεων όλων "
-        "των κατηγοριών εισαγωγής και όχι μόνο επί των θέσεων της ΓΕΛ Ημερήσιας."
+        "των κατηγοριών εισαγωγής. Η «Κάλυψη ΓΕΛ Ημ. %» υπολογίζεται μόνο "
+        "επί των θέσεων της ΓΕΛ Ημερήσιας."
     )
 
     with tab_summary:

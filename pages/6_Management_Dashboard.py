@@ -1,44 +1,64 @@
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+
 from modules.database_manager import load_admissions_with_departments
 from components.sidebar_branding import show_sidebar_branding
 
+
+# ---------------------------------------------------------
+# Ρυθμίσεις σελίδας
+# ---------------------------------------------------------
+
 st.set_page_config(
-    page_title="Dashboard Διοίκησης | ΔΙΠΑΕ",
+    page_title="Management Dashboard | ΔΙΠΑΕ",
     page_icon="📊",
     layout="wide"
 )
+
 show_sidebar_branding()
 
-st.title("📊 Dashboard Διοίκησης Εισακτέων ΔΙ.ΠΑ.Ε.")
+
+st.title("📊 Management Dashboard Εισακτέων ΔΙ.ΠΑ.Ε.")
 
 st.markdown("""
-Συνοπτική διοικητική εικόνα των εισακτέων του ΔΙ.ΠΑ.Ε. ανά έτος.
+Η σελίδα παρουσιάζει συνοπτική διοικητική εικόνα των εισακτέων του ΔΙ.ΠΑ.Ε.,
+με έμφαση στη συνολική εικόνα του Ιδρύματος και στη βασική κατηγορία
+**ΓΕΛ Ημερήσια**.
 
-Το dashboard είναι σχεδιασμένο ώστε να δίνει γρήγορα τις βασικές πληροφορίες
-που ενδιαφέρουν τη διοίκηση του Ιδρύματος.
+**Μεθοδολογικοί κανόνες:**
 
-**Μεθοδολογικοί κανόνες της εφαρμογής:**
-
-- Η ανάλυση γίνεται πάντα για **όλες τις κατηγορίες εισαγωγής**.
+- Η συνολική εικόνα υπολογίζεται από **όλες τις κατηγορίες εισαγωγής**.
 - Οι **Συνολικές Θέσεις** υπολογίζονται από τις **Αρχικές Θέσεις**.
-- Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες / Συνολικές Θέσεις.
+- Η **Συνολική Κάλυψη** υπολογίζεται ως: Επιτυχόντες όλων των κατηγοριών / Συνολικές Θέσεις.
+- Η **Κάλυψη ΓΕΛ Ημερήσια** υπολογίζεται μόνο για τη βασική κατηγορία ΓΕΛ Ημερήσια.
+- Για τη ΓΕΛ Ημερήσια χρησιμοποιούνται οι θέσεις της συγκεκριμένης κατηγορίας.
 - Η **Βάση Προγράμματος** είναι η **Βάση ΓΕΛ Ημερήσια**.
-- Η **Κάλυψη ΓΕΛ Ημερήσια** χρησιμοποιείται ως ένδειξη κάλυψης της βασικής κατηγορίας εισαγωγής.
 - Δεν εμφανίζονται τελικές θέσεις ή φαινόμενη μεταβολή θέσεων.
-- Δεν χρησιμοποιούνται μέσοι όροι βάσεων.
 """)
 
 st.divider()
 
 
+# ---------------------------------------------------------
+# Βοηθητικές συναρτήσεις
+# ---------------------------------------------------------
+
+def safe_int(value):
+    try:
+        if pd.isna(value):
+            return 0
+        return int(round(float(value)))
+    except Exception:
+        return 0
+
+
 def get_gel_day_data(df_year):
     """
-    Επιστρέφει στοιχεία ΓΕΛ Ημερήσια ανά ενεργό προπτυχιακό πρόγραμμα.
+    Επιστρέφει στοιχεία ΓΕΛ Ημερήσια ανά πρόγραμμα.
 
-    Για τις θέσεις ΓΕΛ Ημερήσια χρησιμοποιούνται οι final_positions,
-    γιατί εκεί αποτυπώνονται οι τυχόν μεταφορές θέσεων προς τη ΓΕΛ Ημερήσια.
+    Για τη ΓΕΛ Ημερήσια χρησιμοποιούνται οι final_positions,
+    γιατί σε αυτή την κατηγορία αποτυπώνονται οι θέσεις κατόπιν μεταφοράς.
     """
 
     df_gel = df_year[
@@ -51,7 +71,9 @@ def get_gel_day_data(df_year):
                 "department_code",
                 "gel_day_positions",
                 "gel_day_admitted",
+                "gel_day_empty",
                 "gel_day_coverage",
+                "gel_day_first_score",
                 "gel_day_base_score",
             ]
         )
@@ -61,7 +83,15 @@ def get_gel_day_data(df_year):
         .fillna(df_gel["initial_positions"])
     )
 
-    df_gel["gel_day_admitted"] = df_gel["admitted"]
+    df_gel["gel_day_admitted"] = (
+        df_gel["admitted"]
+        .fillna(0)
+    )
+
+    df_gel["gel_day_empty"] = (
+        df_gel["gel_day_positions"]
+        - df_gel["gel_day_admitted"]
+    )
 
     df_gel["gel_day_coverage"] = (
         df_gel["gel_day_admitted"]
@@ -75,13 +105,16 @@ def get_gel_day_data(df_year):
                 "department_code",
                 "gel_day_positions",
                 "gel_day_admitted",
+                "gel_day_empty",
                 "gel_day_coverage",
+                "first_score",
                 "base_score",
             ]
         ]
         .drop_duplicates(subset=["department_code"])
         .rename(
             columns={
+                "first_score": "gel_day_first_score",
                 "base_score": "gel_day_base_score",
             }
         )
@@ -90,49 +123,9 @@ def get_gel_day_data(df_year):
     return gel_data
 
 
-def classify_coverage(row):
-    """
-    Κατηγοριοποιεί την κάλυψη κάθε προγράμματος.
-
-    Κανόνες:
-    1. Πλήρης συνολική κάλυψη:
-       Συνολική κάλυψη >= 100%.
-
-    2. Πλήρης κάλυψη ΓΕΛ Ημερήσια με μικρά κενά:
-       ΓΕΛ Ημερήσια >= 100% και συνολική κάλυψη από 95% έως κάτω από 100%.
-
-    3. Πλήρης κάλυψη ΓΕΛ Ημερήσια με σημαντικά κενά:
-       ΓΕΛ Ημερήσια >= 100% αλλά συνολική κάλυψη κάτω από 95%.
-
-    4. Μη πλήρης κάλυψη ΓΕΛ Ημερήσια:
-       ΓΕΛ Ημερήσια κάτω από 100%.
-    """
-
-    total_coverage = row.get("coverage")
-    gel_day_coverage = row.get("gel_day_coverage")
-
-    if pd.isna(gel_day_coverage):
-        return "Χωρίς στοιχεία ΓΕΛ Ημ."
-
-    if total_coverage >= 99.999:
-        return "Πλήρης συνολική κάλυψη"
-
-    if gel_day_coverage >= 99.999 and total_coverage >= 95:
-        return "Πλήρης ΓΕΛ Ημ. με μικρά κενά*"
-
-    if gel_day_coverage >= 99.999:
-        return "Πλήρης ΓΕΛ Ημ. με σημαντικά κενά*"
-
-    return "Μη πλήρης ΓΕΛ Ημ."
-
-
 def build_department_summary(df_year):
     """
-    Δημιουργεί σύνοψη ανά ενεργό προπτυχιακό πρόγραμμα.
-
-    Η ανάλυση γίνεται για όλες τις κατηγορίες.
-    Οι συνολικές θέσεις είναι οι αρχικές θέσεις.
-    Η βάση και η κάλυψη ΓΕΛ προέρχονται από τη ΓΕΛ Ημερήσια.
+    Δημιουργεί σύνοψη ανά προπτυχιακό πρόγραμμα.
     """
 
     summary = (
@@ -157,10 +150,15 @@ def build_department_summary(df_year):
         - summary["total_admitted"]
     )
 
-    summary["coverage"] = (
+    summary["total_coverage"] = (
         summary["total_admitted"]
         / summary["total_positions"]
         * 100
+    )
+
+    summary["total_coverage"] = (
+        summary["total_coverage"]
+        .fillna(0)
     )
 
     gel_data = get_gel_day_data(df_year)
@@ -171,52 +169,117 @@ def build_department_summary(df_year):
         how="left"
     )
 
-    summary["coverage_category"] = summary.apply(
-        classify_coverage,
-        axis=1
-    )
+    for col in [
+        "gel_day_positions",
+        "gel_day_admitted",
+        "gel_day_empty",
+        "gel_day_coverage",
+        "gel_day_first_score",
+        "gel_day_base_score",
+    ]:
+        if col not in summary.columns:
+            summary[col] = 0
+
+        summary[col] = (
+            summary[col]
+            .fillna(0)
+        )
 
     return summary
 
 
-def build_coverage_category_counts(department_summary):
-    """
-    Δημιουργεί πίνακα πλήθους προγραμμάτων ανά κατηγορία κάλυψης.
+# ---------------------------------------------------------
+# Μορφοποίηση πινάκων
+# ---------------------------------------------------------
 
-    Περιλαμβάνει όλες τις βασικές κατηγορίες, ακόμη και αν κάποια έχει μηδενικό πλήθος.
-    """
-
-    category_order = [
-        "Πλήρης συνολική κάλυψη",
-        "Πλήρης ΓΕΛ Ημ. με μικρά κενά*",
-        "Πλήρης ΓΕΛ Ημ. με σημαντικά κενά*",
-        "Μη πλήρης ΓΕΛ Ημ.",
-        "Χωρίς στοιχεία ΓΕΛ Ημ.",
+def format_numeric_display(display):
+    integer_columns = [
+        "Συνολικές Θέσεις",
+        "Επιτυχόντες",
+        "Κενές Θέσεις",
+        "ΓΕΛ Ημερήσια Θέσεις",
+        "ΓΕΛ Ημερήσια Επιτυχόντες",
+        "Κενές ΓΕΛ Ημερήσια",
+        "Βάση ΓΕΛ Ημ.",
+        "Πρώτος ΓΕΛ Ημ.",
     ]
 
-    counts = (
-        department_summary["coverage_category"]
-        .value_counts()
-        .reindex(category_order, fill_value=0)
-        .reset_index()
+    for col in integer_columns:
+        if col in display.columns:
+            display[col] = (
+                display[col]
+                .fillna(0)
+                .round(0)
+                .astype(int)
+            )
+
+    percent_columns = [
+        "Συνολική Κάλυψη %",
+        "Κάλυψη ΓΕΛ Ημ. %",
+    ]
+
+    for col in percent_columns:
+        if col in display.columns:
+            display[col] = (
+                display[col]
+                .fillna(0)
+                .round(2)
+            )
+
+    return display
+
+
+def top_base_table(df):
+    table = (
+        df[df["gel_day_base_score"] > 0]
+        .sort_values("gel_day_base_score", ascending=False)
+        .head(5)
     )
 
-    counts.columns = [
-        "Κατηγορία Κάλυψης",
-        "Πλήθος Προγραμμάτων",
-    ]
-
-    return counts
-
-
-def format_base_table(df):
-    """
-    Πίνακας υψηλότερων βάσεων.
-    """
-
-    display = df[
+    display = table[
         [
             "department_name_clean",
+            "school",
+            "city",
+            "gel_day_base_score",
+            "gel_day_first_score",
+            "gel_day_positions",
+            "gel_day_admitted",
+            "gel_day_coverage",
+        ]
+    ].copy()
+
+    display = display.rename(
+        columns={
+            "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
+            "gel_day_first_score": "Πρώτος ΓΕΛ Ημ.",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
+        }
+    )
+
+    return format_numeric_display(display)
+
+
+def top_gel_admitted_table(df):
+    table = (
+        df.sort_values("gel_day_admitted", ascending=False)
+        .head(5)
+    )
+
+    display = table[
+        [
+            "department_name_clean",
+            "school",
+            "city",
+            "gel_day_admitted",
+            "gel_day_positions",
+            "gel_day_empty",
+            "gel_day_coverage",
             "gel_day_base_score",
         ]
     ].copy()
@@ -224,107 +287,130 @@ def format_base_table(df):
     display = display.rename(
         columns={
             "department_name_clean": "Προπτυχιακό Πρόγραμμα",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_empty": "Κενές ΓΕΛ Ημερήσια",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
             "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Βάση ΓΕΛ Ημ."] = (
-        display["Βάση ΓΕΛ Ημ."]
-        .fillna(0)
-        .round(0)
-        .astype(int)
+    return format_numeric_display(display)
+
+
+def top_gel_empty_table(df):
+    table = (
+        df.sort_values("gel_day_empty", ascending=False)
+        .head(5)
     )
 
-    return display
-
-
-def format_admitted_table(df):
-    """
-    Πίνακας περισσότερων επιτυχόντων.
-    """
-
-    display = df[
+    display = table[
         [
             "department_name_clean",
-            "total_admitted",
+            "school",
+            "city",
+            "gel_day_empty",
+            "gel_day_positions",
+            "gel_day_admitted",
+            "gel_day_coverage",
+            "gel_day_base_score",
         ]
     ].copy()
 
     display = display.rename(
         columns={
             "department_name_clean": "Προπτυχιακό Πρόγραμμα",
-            "total_admitted": "Επιτυχόντες",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_empty": "Κενές ΓΕΛ Ημερήσια",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Επιτυχόντες"] = (
-        display["Επιτυχόντες"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
+    return format_numeric_display(display)
+
+
+def top_gel_positions_table(df):
+    table = (
+        df.sort_values("gel_day_positions", ascending=False)
+        .head(5)
     )
 
-    return display
-
-
-def format_empty_table(df):
-    """
-    Πίνακας περισσότερων κενών θέσεων.
-    """
-
-    display = df[
+    display = table[
         [
             "department_name_clean",
-            "empty_positions",
+            "school",
+            "city",
+            "gel_day_positions",
+            "gel_day_admitted",
+            "gel_day_empty",
+            "gel_day_coverage",
+            "gel_day_base_score",
         ]
     ].copy()
 
     display = display.rename(
         columns={
             "department_name_clean": "Προπτυχιακό Πρόγραμμα",
-            "empty_positions": "Κενές Θέσεις",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_empty": "Κενές ΓΕΛ Ημερήσια",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Κενές Θέσεις"] = (
-        display["Κενές Θέσεις"]
-        .fillna(0)
-        .round(0)
-        .astype(int)
+    return format_numeric_display(display)
+
+
+def lowest_gel_coverage_table(df):
+    table = (
+        df[df["gel_day_positions"] > 0]
+        .sort_values("gel_day_coverage", ascending=True)
+        .head(5)
     )
 
-    return display
-
-
-def format_low_coverage_table(df):
-    """
-    Πίνακας χαμηλότερης κάλυψης.
-    """
-
-    display = df[
+    display = table[
         [
             "department_name_clean",
-            "coverage",
+            "school",
+            "city",
+            "gel_day_coverage",
+            "gel_day_positions",
+            "gel_day_admitted",
+            "gel_day_empty",
+            "gel_day_base_score",
         ]
     ].copy()
 
     display = display.rename(
         columns={
             "department_name_clean": "Προπτυχιακό Πρόγραμμα",
-            "coverage": "Κάλυψη %",
+            "school": "Σχολή",
+            "city": "Πόλη",
+            "gel_day_coverage": "Κάλυψη ΓΕΛ Ημ. %",
+            "gel_day_positions": "ΓΕΛ Ημερήσια Θέσεις",
+            "gel_day_admitted": "ΓΕΛ Ημερήσια Επιτυχόντες",
+            "gel_day_empty": "Κενές ΓΕΛ Ημερήσια",
+            "gel_day_base_score": "Βάση ΓΕΛ Ημ.",
         }
     )
 
-    display["Κάλυψη %"] = display["Κάλυψη %"].round(2)
+    return format_numeric_display(display)
 
-    return display
 
+# ---------------------------------------------------------
+# Styling πινάκων
+# ---------------------------------------------------------
 
 def highlight_empty_positions(val):
-    """
-    Χρωματισμός κενών θέσεων.
-    """
-
     try:
         value = float(val)
     except Exception:
@@ -337,10 +423,6 @@ def highlight_empty_positions(val):
 
 
 def highlight_coverage(val):
-    """
-    Χρωματισμός κάλυψης.
-    """
-
     try:
         value = float(val)
     except Exception:
@@ -354,217 +436,359 @@ def highlight_coverage(val):
         return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
 
 
-def style_small_table(df):
-    """
-    Styling μικρών διοικητικών πινάκων.
-
-    Τα ποσοστά κάλυψης εμφανίζονται υποχρεωτικά με 2 δεκαδικά
-    και με το σύμβολο %, ακόμη και όταν το Streamlit χρησιμοποιεί Styler.
-    """
-
+def style_table(df):
     style_obj = df.style
 
     format_dict = {}
 
-    if "Κάλυψη %" in df.columns:
-        format_dict["Κάλυψη %"] = "{:.2f}%"
+    for col in df.columns:
+        if "Κάλυψη" in col and "%" in col:
+            format_dict[col] = "{:.2f}%"
 
     if format_dict:
         style_obj = style_obj.format(format_dict)
 
-    if "Κενές Θέσεις" in df.columns:
+    empty_columns = [
+        col for col in df.columns
+        if "Κενές" in col
+    ]
+
+    for col in empty_columns:
         try:
             style_obj = style_obj.map(
                 highlight_empty_positions,
-                subset=["Κενές Θέσεις"]
+                subset=[col]
             )
         except AttributeError:
             style_obj = style_obj.applymap(
                 highlight_empty_positions,
-                subset=["Κενές Θέσεις"]
+                subset=[col]
             )
 
-    if "Κάλυψη %" in df.columns:
+    coverage_columns = [
+        col for col in df.columns
+        if "Κάλυψη" in col and "%" in col
+    ]
+
+    for col in coverage_columns:
         try:
             style_obj = style_obj.map(
                 highlight_coverage,
-                subset=["Κάλυψη %"]
+                subset=[col]
             )
         except AttributeError:
             style_obj = style_obj.applymap(
                 highlight_coverage,
-                subset=["Κάλυψη %"]
+                subset=[col]
             )
 
     return style_obj
 
 
-def create_single_institution_chart(total_positions, total_admitted):
-    """
-    Δημιουργεί γράφημα με δύο στήλες για το σύνολο του Ιδρύματος.
-    """
+# ---------------------------------------------------------
+# Γραφήματα
+# ---------------------------------------------------------
 
+def create_institution_positions_chart(total_positions, total_admitted, gel_positions, gel_admitted):
     chart_df = pd.DataFrame(
         {
+            "Κατηγορία Δείκτη": [
+                "Σύνολο όλων των κατηγοριών",
+                "Σύνολο όλων των κατηγοριών",
+                "ΓΕΛ Ημερήσια",
+                "ΓΕΛ Ημερήσια",
+            ],
             "Δείκτης": [
-                "Συνολικές Θέσεις",
+                "Θέσεις",
+                "Επιτυχόντες",
+                "Θέσεις",
                 "Επιτυχόντες",
             ],
             "Πλήθος": [
                 total_positions,
                 total_admitted,
+                gel_positions,
+                gel_admitted,
             ],
         }
     )
 
     fig = px.bar(
         chart_df,
-        x="Δείκτης",
+        x="Κατηγορία Δείκτη",
         y="Πλήθος",
+        color="Δείκτης",
+        barmode="group",
         text="Πλήθος",
-        title="Συνολικές θέσεις και επιτυχόντες Ιδρύματος"
+        title="Θέσεις και επιτυχόντες Ιδρύματος: σύνολο και ΓΕΛ Ημερήσια"
     )
 
     fig.update_traces(
-        textposition="outside"
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    max_value = (
+        chart_df["Πλήθος"].max()
+        if not chart_df.empty
+        else 0
     )
 
     fig.update_layout(
+        height=520,
         xaxis_title="",
-        yaxis_title="Πλήθος"
+        yaxis_title="Πλήθος",
+        yaxis_range=[0, max(10, max_value * 1.20)],
+        legend_title="",
+        margin=dict(l=20, r=80, t=80, b=80)
     )
 
     return fig
 
 
-def create_coverage_category_chart(coverage_counts):
-    """
-    Δημιουργεί γράφημα κατηγοριών κάλυψης προγραμμάτων.
-    """
-
-    fig = px.bar(
-        coverage_counts,
-        x="Κατηγορία Κάλυψης",
-        y="Πλήθος Προγραμμάτων",
-        text="Πλήθος Προγραμμάτων",
-        title="Κατηγορίες κάλυψης προγραμμάτων"
-    )
-
-    fig.update_traces(
-        textposition="outside"
-    )
-
+def apply_horizontal_chart_layout(fig, title, xaxis_title):
     fig.update_layout(
-        xaxis_title="",
-        yaxis_title="Πλήθος Προγραμμάτων",
-        yaxis=dict(dtick=1)
-    )
-
-    return fig
-
-
-def create_small_bar_chart(
-    display_df,
-    value_col,
-    title,
-    is_score=False,
-    is_percent=False,
-    integer_axis=False
-):
-    """
-    Δημιουργεί μικρό γράφημα Top-5 για τις διοικητικές ενότητες.
-    """
-
-    fig = px.bar(
-        display_df,
-        x="Προπτυχιακό Πρόγραμμα",
-        y=value_col,
-        text=value_col,
-        title=title
-    )
-
-    if is_score:
-        fig.update_traces(
-            texttemplate="%{text:.0f}",
-            textposition="outside"
-        )
-    elif is_percent:
-        fig.update_traces(
-            texttemplate="%{text:.2f}%",
-            textposition="outside"
-        )
-    else:
-        fig.update_traces(
-            textposition="outside"
-        )
-
-    fig.update_layout(
-        xaxis_title="",
-        yaxis_title=value_col,
+        title=title,
+        xaxis_title=xaxis_title,
+        yaxis_title="",
+        height=560,
+        margin=dict(l=20, r=180, t=80, b=40),
         uniformtext_minsize=8,
-        uniformtext_mode="hide"
+        uniformtext_mode="show"
     )
 
-    if is_score:
-        fig.update_layout(
-            yaxis_range=[0, 20000]
-        )
-
-    if is_percent:
-        fig.update_layout(
-            yaxis_range=[0, 100]
-        )
-
-    if integer_axis:
-        fig.update_layout(
-            yaxis=dict(dtick=1)
-        )
+    fig.update_yaxes(automargin=True)
+    fig.update_xaxes(automargin=True)
 
     return fig
 
 
-def show_management_section(
-    title,
-    source_df,
-    table_formatter,
-    value_col,
-    chart_title,
-    is_score=False,
-    is_percent=False,
-    integer_axis=False
-):
+def create_top_base_chart(df):
+    chart_df = (
+        df[df["gel_day_base_score"] > 0]
+        .sort_values("gel_day_base_score", ascending=True)
+        .tail(5)
+        .copy()
+    )
+
+    max_value = chart_df["gel_day_base_score"].max() if not chart_df.empty else 0
+
+    fig = px.bar(
+        chart_df,
+        x="gel_day_base_score",
+        y="department_name_clean",
+        orientation="h",
+        text="gel_day_base_score",
+        title="Top 5 υψηλότερων βάσεων ΓΕΛ Ημερήσια"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, max(20000, max_value * 1.18)]
+    )
+
+    return apply_horizontal_chart_layout(
+        fig,
+        "Top 5 υψηλότερων βάσεων ΓΕΛ Ημερήσια",
+        "Βάση ΓΕΛ Ημερήσια"
+    )
+
+
+def create_top_gel_admitted_chart(df):
+    chart_df = (
+        df.sort_values("gel_day_admitted", ascending=True)
+        .tail(5)
+        .copy()
+    )
+
+    max_value = chart_df["gel_day_admitted"].max() if not chart_df.empty else 0
+
+    fig = px.bar(
+        chart_df,
+        x="gel_day_admitted",
+        y="department_name_clean",
+        orientation="h",
+        text="gel_day_admitted",
+        title="Top 5 περισσότερων επιτυχόντων ΓΕΛ Ημερήσια"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, max(10, max_value * 1.25)]
+    )
+
+    return apply_horizontal_chart_layout(
+        fig,
+        "Top 5 περισσότερων επιτυχόντων ΓΕΛ Ημερήσια",
+        "Επιτυχόντες ΓΕΛ Ημερήσια"
+    )
+
+
+def create_top_gel_empty_chart(df):
+    chart_df = (
+        df.sort_values("gel_day_empty", ascending=True)
+        .tail(5)
+        .copy()
+    )
+
+    max_value = chart_df["gel_day_empty"].max() if not chart_df.empty else 0
+
+    fig = px.bar(
+        chart_df,
+        x="gel_day_empty",
+        y="department_name_clean",
+        orientation="h",
+        text="gel_day_empty",
+        title="Top 5 περισσότερων κενών θέσεων ΓΕΛ Ημερήσια"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, max(5, max_value * 1.25)],
+        xaxis=dict(dtick=1)
+    )
+
+    return apply_horizontal_chart_layout(
+        fig,
+        "Top 5 περισσότερων κενών θέσεων ΓΕΛ Ημερήσια",
+        "Κενές ΓΕΛ Ημερήσια"
+    )
+
+
+def create_top_gel_positions_chart(df):
+    chart_df = (
+        df.sort_values("gel_day_positions", ascending=True)
+        .tail(5)
+        .copy()
+    )
+
+    max_value = chart_df["gel_day_positions"].max() if not chart_df.empty else 0
+
+    fig = px.bar(
+        chart_df,
+        x="gel_day_positions",
+        y="department_name_clean",
+        orientation="h",
+        text="gel_day_positions",
+        title="Top 5 περισσότερων θέσεων ΓΕΛ Ημερήσια"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, max(10, max_value * 1.25)]
+    )
+
+    return apply_horizontal_chart_layout(
+        fig,
+        "Top 5 περισσότερων θέσεων ΓΕΛ Ημερήσια",
+        "Θέσεις ΓΕΛ Ημερήσια"
+    )
+
+
+def create_lowest_gel_coverage_chart(df):
+    chart_df = (
+        df[df["gel_day_positions"] > 0]
+        .sort_values("gel_day_coverage", ascending=True)
+        .head(5)
+        .sort_values("gel_day_coverage", ascending=True)
+        .copy()
+    )
+
+    fig = px.bar(
+        chart_df,
+        x="gel_day_coverage",
+        y="department_name_clean",
+        orientation="h",
+        text="gel_day_coverage",
+        title="Top 5 χαμηλότερης κάλυψης ΓΕΛ Ημερήσια"
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.2f}%",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        xaxis_range=[0, 115]
+    )
+
+    return apply_horizontal_chart_layout(
+        fig,
+        "Top 5 χαμηλότερης κάλυψης ΓΕΛ Ημερήσια",
+        "Κάλυψη ΓΕΛ Ημερήσια %"
+    )
+
+
+def get_top5_content(selection, department_summary):
     """
-    Εμφανίζει διοικητική ενότητα με πίνακα και γράφημα Top-5.
+    Επιστρέφει τίτλο, πίνακα, γράφημα και υποσημείωση για την επιλεγμένη ανάλυση.
     """
 
-    st.markdown(f"### {title}")
-
-    display_df = table_formatter(source_df)
-
-    col_table, col_chart = st.columns([1, 1.4])
-
-    with col_table:
-        st.dataframe(
-            style_small_table(display_df),
-            use_container_width=True,
-            hide_index=True
+    if selection == "Top 5 υψηλότερων βάσεων ΓΕΛ Ημερήσια":
+        return (
+            "Top 5 υψηλότερων βάσεων ΓΕΛ Ημερήσια",
+            top_base_table(department_summary),
+            create_top_base_chart(department_summary),
+            "Ο πίνακας και το γράφημα βασίζονται στη βάση της ΓΕΛ Ημερήσιας."
         )
 
-    with col_chart:
-        fig = create_small_bar_chart(
-            display_df=display_df,
-            value_col=value_col,
-            title=chart_title,
-            is_score=is_score,
-            is_percent=is_percent,
-            integer_axis=integer_axis
+    if selection == "Top 5 περισσότερων επιτυχόντων ΓΕΛ Ημερήσια":
+        return (
+            "Top 5 περισσότερων επιτυχόντων ΓΕΛ Ημερήσια",
+            top_gel_admitted_table(department_summary),
+            create_top_gel_admitted_chart(department_summary),
+            "Ο πίνακας και το γράφημα βασίζονται στους επιτυχόντες της ΓΕΛ Ημερήσιας."
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
+    if selection == "Top 5 περισσότερων κενών θέσεων ΓΕΛ Ημερήσια":
+        return (
+            "Top 5 περισσότερων κενών θέσεων ΓΕΛ Ημερήσια",
+            top_gel_empty_table(department_summary),
+            create_top_gel_empty_chart(department_summary),
+            "Ο πίνακας και το γράφημα χρησιμοποιούν αποκλειστικά τις θέσεις και τους επιτυχόντες της ΓΕΛ Ημερήσιας."
         )
 
+    if selection == "Top 5 περισσότερων θέσεων ΓΕΛ Ημερήσια":
+        return (
+            "Top 5 περισσότερων θέσεων ΓΕΛ Ημερήσια",
+            top_gel_positions_table(department_summary),
+            create_top_gel_positions_chart(department_summary),
+            "Ο πίνακας και το γράφημα χρησιμοποιούν αποκλειστικά τις θέσεις της ΓΕΛ Ημερήσιας."
+        )
+
+    return (
+        "Top 5 χαμηλότερης κάλυψης ΓΕΛ Ημερήσια",
+        lowest_gel_coverage_table(department_summary),
+        create_lowest_gel_coverage_chart(department_summary),
+        "Ο πίνακας και το γράφημα χρησιμοποιούν αποκλειστικά την κάλυψη της ΓΕΛ Ημερήσιας και όχι τη συνολική κάλυψη όλων των κατηγοριών."
+    )
+
+
+# ---------------------------------------------------------
+# Κύρια ροή
+# ---------------------------------------------------------
 
 try:
     df = load_admissions_with_departments()
@@ -589,16 +813,13 @@ try:
 
     department_summary = build_department_summary(df_year)
 
-    if department_summary.empty:
-        st.warning("Δεν δημιουργήθηκε σύνοψη προγραμμάτων.")
-        st.stop()
-
-    coverage_counts = build_coverage_category_counts(department_summary)
-
     total_programs = int(department_summary["department_code"].nunique())
-    total_positions = int(department_summary["total_positions"].sum())
-    total_admitted = int(department_summary["total_admitted"].sum())
-    total_empty_positions = int(department_summary["empty_positions"].sum())
+    total_schools = int(department_summary["school"].nunique())
+    total_cities = int(department_summary["city"].nunique())
+
+    total_positions = safe_int(department_summary["total_positions"].sum())
+    total_admitted = safe_int(department_summary["total_admitted"].sum())
+    total_empty = safe_int(department_summary["empty_positions"].sum())
 
     total_coverage = (
         total_admitted / total_positions * 100
@@ -606,31 +827,44 @@ try:
         else 0
     )
 
-    full_total_count = int(
-        department_summary[
-            department_summary["coverage_category"] == "Πλήρης συνολική κάλυψη"
-        ]["department_code"].nunique()
+    gel_day_positions = safe_int(department_summary["gel_day_positions"].sum())
+    gel_day_admitted = safe_int(department_summary["gel_day_admitted"].sum())
+    gel_day_empty = safe_int(department_summary["gel_day_empty"].sum())
+
+    gel_day_coverage = (
+        gel_day_admitted / gel_day_positions * 100
+        if gel_day_positions > 0
+        else 0
     )
 
-    full_gel_small_gaps_count = int(
-        department_summary[
-            department_summary["coverage_category"] == "Πλήρης ΓΕΛ Ημ. με μικρά κενά*"
-        ]["department_code"].nunique()
-    )
-
-    full_gel_significant_gaps_count = int(
-        department_summary[
-            department_summary["coverage_category"] == "Πλήρης ΓΕΛ Ημ. με σημαντικά κενά*"
-        ]["department_code"].nunique()
-    )
-
-    not_full_gel_count = int(
-        department_summary[
-            department_summary["coverage_category"] == "Μη πλήρης ΓΕΛ Ημ."
-        ]["department_code"].nunique()
-    )
+    # ---------------------------------------------------------
+    # Συνολική εικόνα Ιδρύματος
+    # ---------------------------------------------------------
 
     st.subheader(f"Συνολική εικόνα Ιδρύματος {selected_year}")
+
+    info1, info2, info3, info4 = st.columns(4)
+
+    with info1:
+        st.metric(
+            "Ενεργά Προπτυχιακά Προγράμματα",
+            total_programs
+        )
+
+    with info2:
+        st.metric(
+            "Σχολές",
+            total_schools
+        )
+
+    with info3:
+        st.metric(
+            "Πόλεις",
+            total_cities
+        )
+
+    with info4:
+        st.empty()
 
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
@@ -649,149 +883,112 @@ try:
     with kpi3:
         st.metric(
             "Κενές Θέσεις",
-            total_empty_positions
+            total_empty
         )
 
     with kpi4:
         st.metric(
-            "Ποσοστό Κάλυψης",
+            "Συνολική Κάλυψη",
             f"{total_coverage:.2f}%"
         )
 
-    st.caption(
-        f"Η εικόνα αφορά {total_programs} ενεργά προπτυχιακά προγράμματα σπουδών "
-        "και όλες τις κατηγορίες εισαγωγής."
-    )
+    gel1, gel2, gel3, gel4 = st.columns(4)
 
-    st.divider()
-
-    st.subheader("Κεντρικά γραφήματα Ιδρύματος")
-
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        institution_fig = create_single_institution_chart(
-            total_positions=total_positions,
-            total_admitted=total_admitted
+    with gel1:
+        st.metric(
+            "ΓΕΛ Ημερ. Θέσεις",
+            gel_day_positions
         )
 
-        st.plotly_chart(
-            institution_fig,
-            use_container_width=True
+    with gel2:
+        st.metric(
+            "ΓΕΛ Ημερ. Επιτυχόντες",
+            gel_day_admitted
         )
 
-    with chart_col2:
-        coverage_category_fig = create_coverage_category_chart(
-            coverage_counts=coverage_counts
+    with gel3:
+        st.metric(
+            "Κενές ΓΕΛ Ημερ.",
+            gel_day_empty
         )
 
-        st.plotly_chart(
-            coverage_category_fig,
-            use_container_width=True
+    with gel4:
+        st.metric(
+            "Κάλυψη ΓΕΛ Ημερ.",
+            f"{gel_day_coverage:.2f}%"
         )
 
     st.caption(
-        "* Πλήρης κάλυψη ΓΕΛ Ημερήσια σημαίνει ότι το πρόγραμμα κάλυψε το 100% "
-        "των θέσεων στη βασική κατηγορία εισαγωγής. "
-        "Ως μικρά κενά θεωρείται συνολική κάλυψη τουλάχιστον 95% αλλά μικρότερη από 100%."
-    )
-
-    status_col1, status_col2, status_col3, status_col4 = st.columns(4)
-
-    with status_col1:
-        st.metric(
-            "Πλήρης συνολική κάλυψη",
-            full_total_count
-        )
-
-    with status_col2:
-        st.metric(
-            "Πλήρης ΓΕΛ Ημ. με μικρά κενά*",
-            full_gel_small_gaps_count
-        )
-
-    with status_col3:
-        st.metric(
-            "Πλήρης ΓΕΛ Ημ. με σημαντικά κενά*",
-            full_gel_significant_gaps_count
-        )
-
-    with status_col4:
-        st.metric(
-            "Μη πλήρης ΓΕΛ Ημ.",
-            not_full_gel_count
-        )
-
-    st.divider()
-
-    st.subheader("Διοικητικές επισημάνσεις Top-5")
-
-    top_base = (
-        department_summary
-        .dropna(subset=["gel_day_base_score"])
-        .sort_values("gel_day_base_score", ascending=False)
-        .head(5)
-    )
-
-    top_admitted = (
-        department_summary
-        .sort_values("total_admitted", ascending=False)
-        .head(5)
-    )
-
-    top_empty = (
-        department_summary
-        .sort_values("empty_positions", ascending=False)
-        .head(5)
-    )
-
-    low_coverage = (
-        department_summary
-        .sort_values("coverage", ascending=True)
-        .head(5)
-    )
-
-    show_management_section(
-        title="Υψηλότερες βάσεις ΓΕΛ Ημερήσια",
-        source_df=top_base,
-        table_formatter=format_base_table,
-        value_col="Βάση ΓΕΛ Ημ.",
-        chart_title="Top-5 υψηλότερες βάσεις ΓΕΛ Ημερήσια",
-        is_score=True
+        "Η δεύτερη σειρά αφορά όλες τις κατηγορίες εισαγωγής. "
+        "Η τρίτη σειρά αφορά αποκλειστικά τη ΓΕΛ Ημερήσια."
     )
 
     st.divider()
 
-    show_management_section(
-        title="Περισσότεροι επιτυχόντες",
-        source_df=top_admitted,
-        table_formatter=format_admitted_table,
-        value_col="Επιτυχόντες",
-        chart_title="Top-5 περισσότερων επιτυχόντων"
+    # ---------------------------------------------------------
+    # Γράφημα Ιδρύματος
+    # ---------------------------------------------------------
+
+    st.subheader("Θέσεις και επιτυχόντες Ιδρύματος")
+
+    fig = create_institution_positions_chart(
+        total_positions=total_positions,
+        total_admitted=total_admitted,
+        gel_positions=gel_day_positions,
+        gel_admitted=gel_day_admitted
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    st.caption(
+        "Το γράφημα συγκρίνει τις θέσεις και τους επιτυχόντες σε επίπεδο Ιδρύματος "
+        "για όλες τις κατηγορίες εισαγωγής και για τη ΓΕΛ Ημερήσια."
     )
 
     st.divider()
 
-    show_management_section(
-        title="Περισσότερες κενές θέσεις",
-        source_df=top_empty,
-        table_formatter=format_empty_table,
-        value_col="Κενές Θέσεις",
-        chart_title="Top-5 περισσότερων κενών θέσεων",
-        integer_axis=True
+    # ---------------------------------------------------------
+    # Top 5 με επιλογή
+    # ---------------------------------------------------------
+
+    st.subheader("Top-5 δείκτες ΓΕΛ Ημερήσια")
+
+    top5_selection = st.selectbox(
+        "Επιλέξτε είδος Top-5",
+        [
+            "Top 5 υψηλότερων βάσεων ΓΕΛ Ημερήσια",
+            "Top 5 περισσότερων επιτυχόντων ΓΕΛ Ημερήσια",
+            "Top 5 περισσότερων κενών θέσεων ΓΕΛ Ημερήσια",
+            "Top 5 περισσότερων θέσεων ΓΕΛ Ημερήσια",
+            "Top 5 χαμηλότερης κάλυψης ΓΕΛ Ημερήσια",
+        ]
     )
 
-    st.divider()
-
-    show_management_section(
-        title="Χαμηλότερο ποσοστό κάλυψης",
-        source_df=low_coverage,
-        table_formatter=format_low_coverage_table,
-        value_col="Κάλυψη %",
-        chart_title="Top-5 χαμηλότερης κάλυψης",
-        is_percent=True
+    title, table, fig, note = get_top5_content(
+        selection=top5_selection,
+        department_summary=department_summary
     )
+
+    st.markdown(f"### {title}")
+
+    st.dataframe(
+        style_table(table),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.caption(note)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    st.caption(note)
 
 except Exception as e:
-    st.error("Υπήρξε πρόβλημα κατά την παραγωγή του Dashboard Διοίκησης.")
+    st.error("Υπήρξε πρόβλημα κατά την προβολή του Management Dashboard.")
     st.exception(e)
